@@ -1,0 +1,188 @@
+// Version: 1.0.0
+type ChatMessage__1037536196 =
+  {gameId : Nat; message : Text; sender : Text; timestamp : Int};
+type Data__791452850<K, V> =
+  {var count : Nat__490723111; kvs : [var ?(K, V)]};
+type FileReference__185630561 = {hash : Text; path : Text};
+type Frame__1049698092 =
+  {roll1 : Nat; roll2 : Nat; roll3 : ?Nat; score : Nat};
+type Game__42905640 =
+  {
+    frames : [[Frame__1049698092]];
+    id : Nat;
+    owner : ?Principal;
+    players : [Player__3343875];
+    timestamp : Int;
+    totalScores : [Nat]
+  };
+type Internal__8484328<K, V> =
+  {children : [var ?Node__46230540<K, V>]; data : Data__791452850<K, V>};
+type Invitation__141447427 =
+  {invitee : Principal; inviter : Principal; teamId : Nat; timestamp : Int};
+type JoinRequest__81935976 =
+  {requester : Principal; teamId : Nat; timestamp : Int};
+type Leaf__809889148<K, V> = {data : Data__791452850<K, V>};
+type Map__158565046<K, V> = Map__297112838<K, V>;
+type Map__297112838<K, V> =
+  {var root : Node__46230540<K, V>; var size : Nat__490723111};
+type Map__605269027<K, V> = Map__158565046<K, V>;
+type Nat__490723111 = Nat__920180692;
+type Nat__920180692 = Nat;
+type Node__46230540<K, V> =
+  {#internal : Internal__8484328<K, V>; #leaf : Leaf__809889148<K, V>};
+type PaymentTransaction__389674112 =
+  {
+    exchangeRate : Nat;
+    icpAmount : Nat;
+    id : Nat;
+    reference : ?Text;
+    status : Text;
+    stkAmount : Nat;
+    timestamp : Int;
+    user : Principal
+  };
+type Player__3343875 =
+  {
+    averageScore : Nat;
+    gamesPlayed : Nat;
+    highestScore : Nat;
+    name : Text;
+    scores : [Nat];
+    totalPoints : Nat;
+    totalSpares : Nat;
+    totalStrikes : Nat
+  };
+type PriceFeed__505148417 =
+  {icpUsd : Nat; lastUpdated : Int; source : Text; status : Text};
+type Team__97538390 =
+  {
+    averageScore : Nat;
+    bestScore : Nat;
+    createdAt : Int;
+    creator : Principal;
+    description : Text;
+    id : Nat;
+    members : [Principal];
+    name : Text;
+    totalGames : Nat
+  };
+type TokenPool__673218798 = {name : Text; remaining : Nat; total : Nat};
+type TokenTransaction__145440227 =
+  {
+    amount : Nat;
+    from : ?Principal;
+    id : Nat;
+    ledgerHeight : ?Nat;
+    pool : ?Text;
+    reference : ?Text;
+    status : Text;
+    timestamp : Int;
+    to : ?Principal;
+    transactionType : Text
+  };
+type UserProfile__491224006 =
+  {
+    achievements : [Text];
+    averageScore : Nat;
+    displayName : Text;
+    games : [Nat];
+    gamesPlayed : Nat;
+    highestScore : Nat;
+    principal : Principal;
+    profilePicture : ?Text;
+    totalPoints : Nat;
+    totalSpares : Nat;
+    totalStrikes : Nat
+  };
+type UserRole__1054455867 = {#admin; #guest; #user};
+type Wallet__442667382 =
+  {
+    icpAccountId : Text;
+    icpTransactions : [TokenTransaction__145440227];
+    stkBalance : Nat;
+    stkPrincipalId : Text;
+    stkTransactions : [TokenTransaction__145440227]
+  };
+actor {
+  stable _nat64Max : Nat;
+  stable var _stable_adminIcpWallet : ?Text;
+  stable var _stable_chatMessages : [ChatMessage__1037536196];
+  stable var _stable_invitations : [Invitation__141447427];
+  stable var _stable_isInitialized : Bool;
+  stable var _stable_joinRequests : [JoinRequest__81935976];
+  stable var _stable_ledgerPrincipal : ?Principal;
+  stable var _stable_nextGameId : Nat;
+  stable var _stable_nextPaymentId : Nat;
+  stable var _stable_nextTeamId : Nat;
+  stable var _stable_nextTransactionId : Nat;
+  stable var _stable_totalSupply : Nat;
+  stable accessControlState :
+    {
+      var adminAssigned : Bool;
+      userRoles : Map__605269027<Principal, UserRole__1054455867>
+    };
+  stable var adminIcpWallet : ?Text;
+  stable var chatMessages : [ChatMessage__1037536196];
+  stable games :
+    {
+      var root : Node__46230540<Text, Game__42905640>;
+      var size : Nat__490723111
+    };
+  stable var invitations : [Invitation__141447427];
+  stable var isInitialized : Bool;
+  stable var joinRequests : [JoinRequest__81935976];
+  stable var ledgerPrincipal : ?Principal;
+  stable var nextGameId : Nat;
+  stable var nextPaymentId : Nat;
+  stable var nextTeamId : Nat;
+  stable var nextTransactionId : Nat;
+  stable paymentTransactions :
+    {
+      var root : Node__46230540<Nat, PaymentTransaction__389674112>;
+      var size : Nat__490723111
+    };
+  stable playerStats :
+    {
+      var root : Node__46230540<Text, Player__3343875>;
+      var size : Nat__490723111
+    };
+  stable priceFeeds :
+    {
+      var root : Node__46230540<Text, PriceFeed__505148417>;
+      var size : Nat__490723111
+    };
+  stable registry :
+    {
+      var authorizedPrincipals : [Principal];
+      var blobsToRemove : Map__605269027<Text, Bool>;
+      var references : Map__605269027<Text, FileReference__185630561>
+    };
+  stable teams :
+    {
+      var root : Node__46230540<Nat, Team__97538390>;
+      var size : Nat__490723111
+    };
+  stable tokenPools :
+    {
+      var root : Node__46230540<Text, TokenPool__673218798>;
+      var size : Nat__490723111
+    };
+  stable tokenTransactions :
+    {
+      var root : Node__46230540<Nat, TokenTransaction__145440227>;
+      var size : Nat__490723111
+    };
+  stable var totalSupply : Nat;
+  stable userBalances :
+    {var root : Node__46230540<Principal, Nat>; var size : Nat__490723111};
+  stable userProfiles :
+    {
+      var root : Node__46230540<Principal, UserProfile__491224006>;
+      var size : Nat__490723111
+    };
+  stable userWallets :
+    {
+      var root : Node__46230540<Principal, Wallet__442667382>;
+      var size : Nat__490723111
+    }
+};

@@ -1,0 +1,352 @@
+type http_request_result = 
+ record {
+   body: blob;
+   headers: vec http_header;
+   status: nat;
+ };
+type http_header = 
+ record {
+   name: text;
+   value: text;
+ };
+type _ImmutableObjectStorageRefillResult = 
+ record {
+   success: opt bool;
+   topped_up_amount: opt nat;
+ };
+type _ImmutableObjectStorageRefillInformation = record {
+                                                  proposed_top_up_amount:
+                                                   opt nat;};
+type _ImmutableObjectStorageCreateCertificateResult = 
+ record {
+   blob_hash: text;
+   method: text;
+ };
+type Wallet = 
+ record {
+   icpAccountId: text;
+   icpTransactions: vec TokenTransaction;
+   stkBalance: nat;
+   stkPrincipalId: text;
+   stkTransactions: vec TokenTransaction;
+ };
+type UserRole = 
+ variant {
+   admin;
+   guest;
+   user;
+ };
+type UserProfile = 
+ record {
+   achievements: vec text;
+   averageScore: nat;
+   displayName: text;
+   games: vec nat;
+   gamesPlayed: nat;
+   highestScore: nat;
+   "principal": principal;
+   profilePicture: opt text;
+   totalPoints: nat;
+   totalSpares: nat;
+   totalStrikes: nat;
+ };
+type TransformationOutput = 
+ record {
+   body: blob;
+   headers: vec http_header;
+   status: nat;
+ };
+type TransformationInput = 
+ record {
+   context: blob;
+   response: http_request_result;
+ };
+type TokenTransaction = 
+ record {
+   amount: nat;
+   from: opt principal;
+   id: nat;
+   ledgerHeight: opt nat;
+   pool: opt text;
+   reference: opt text;
+   status: text;
+   timestamp: int;
+   to: opt principal;
+   transactionType: text;
+ };
+type TokenPool = 
+ record {
+   name: text;
+   remaining: nat;
+   total: nat;
+ };
+type Team = 
+ record {
+   averageScore: nat;
+   bestScore: nat;
+   createdAt: int;
+   creator: principal;
+   description: text;
+   id: nat;
+   members: vec principal;
+   name: text;
+   totalGames: nat;
+ };
+type PriceFeed = 
+ record {
+   icpUsd: nat;
+   lastUpdated: int;
+   source: text;
+   status: text;
+ };
+type Player = 
+ record {
+   averageScore: nat;
+   gamesPlayed: nat;
+   highestScore: nat;
+   name: text;
+   scores: vec nat;
+   totalPoints: nat;
+   totalSpares: nat;
+   totalStrikes: nat;
+ };
+type PaymentTransaction = 
+ record {
+   exchangeRate: nat;
+   icpAmount: nat;
+   id: nat;
+   reference: opt text;
+   status: text;
+   stkAmount: nat;
+   timestamp: int;
+   user: principal;
+ };
+type JoinRequest = 
+ record {
+   requester: principal;
+   teamId: nat;
+   timestamp: int;
+ };
+type Invitation = 
+ record {
+   invitee: principal;
+   inviter: principal;
+   teamId: nat;
+   timestamp: int;
+ };
+type Game = 
+ record {
+   frames: vec vec Frame;
+   id: nat;
+   owner: opt principal;
+   players: vec Player;
+   timestamp: int;
+   totalScores: vec nat;
+ };
+type Frame = 
+ record {
+   roll1: nat;
+   roll2: nat;
+   roll3: opt nat;
+   score: nat;
+ };
+type FileReference = 
+ record {
+   hash: text;
+   path: text;
+ };
+type ChatMessage = 
+ record {
+   gameId: nat;
+   message: text;
+   sender: text;
+   timestamp: int;
+ };
+service : {
+  _immutableObjectStorageBlobsAreLive: (hashes: vec blob) -> (vec bool) query;
+  _immutableObjectStorageBlobsToDelete: () -> (vec blob) query;
+  _immutableObjectStorageConfirmBlobDeletion: (blobs: vec blob) -> ();
+  _immutableObjectStorageCreateCertificate: (blobHash: text) ->
+   (_ImmutableObjectStorageCreateCertificateResult);
+  _immutableObjectStorageRefillCashier: (refillInformation:
+   opt _ImmutableObjectStorageRefillInformation) ->
+   (_ImmutableObjectStorageRefillResult);
+  _immutableObjectStorageUpdateGatewayPrincipals: () -> ();
+  _initializeAccessControl: () -> ();
+  acceptInvitation: (teamId: nat) -> ();
+  addIcpTransaction: (transaction: TokenTransaction) ->
+   (variant {
+      err: text;
+      ok;
+    });
+  addStkTransaction: (transaction: TokenTransaction) ->
+   (variant {
+      err: text;
+      ok;
+    });
+  adjustPoolAllocation: (poolName: text, newTotal: nat) ->
+   (variant {
+      err: text;
+      ok;
+    });
+  approveJoinRequest: (teamId: nat, requester: principal) -> ();
+  assignCallerUserRole: (user: principal, role: UserRole) -> ();
+  createTeam: (name: text, description: text) -> (nat);
+  creditUserWallet: (user: principal, stkAmount: nat) -> ();
+  declineInvitation: (teamId: nat) -> ();
+  denyJoinRequest: (teamId: nat, requester: principal) -> ();
+  dropFileReference: (path: text) -> ();
+  fetchIcpPrice: (source: text) -> (text);
+  getAdminAuditTrail: () ->
+   (variant {
+      err: text;
+      ok: vec TokenTransaction;
+    }) query;
+  getAdminIcpWallet: () -> (opt text) query;
+  getAdminTreasuryAddress: () -> (opt text) query;
+  getAllGames: () -> (vec Game) query;
+  getAllMessages: () -> (vec ChatMessage) query;
+  getAllPlayerStats: () -> (vec Player) query;
+  getAllTeams: () -> (vec Team) query;
+  getAllUserProfiles: () -> (vec UserProfile) query;
+  getCallerAccountIds: () -> (text, text) query;
+  getCallerAddresses: () -> (text, text) query;
+  getCallerDerivedAccountId: () -> (text) query;
+  getCallerIcpBalance: (accountIdText: text) ->
+   (variant {
+      err: text;
+      ok: nat;
+    });
+  getCallerIcpTransactions: () -> (vec TokenTransaction) query;
+  getCallerPrincipalId: () -> (text) query;
+  getCallerStkBalance: () -> (nat) query;
+  getCallerStkTransactions: () -> (vec TokenTransaction) query;
+  getCallerUserProfile: () -> (opt UserProfile) query;
+  getCallerUserRole: () -> (UserRole) query;
+  getCallerWallet: () -> (opt Wallet) query;
+  getCallerWalletSummary: () -> (nat, vec TokenTransaction,
+   vec TokenTransaction, text, text) query;
+  getFileReference: (path: text) -> (opt FileReference) query;
+  getGame: (gameId: nat) -> (opt Game) query;
+  getInvitations: () -> (vec Invitation) query;
+  getJoinRequests: () -> (vec JoinRequest) query;
+  getLeaderboard: () -> (vec Player) query;
+  getLedgerPrincipal: () -> (variant {
+                               err: text;
+                               ok: principal;
+                             }) query;
+  getMessages: (gameId: nat) -> (vec ChatMessage) query;
+  getPaymentTransaction: (id: nat) -> (opt PaymentTransaction);
+  getPaymentTransactions: () -> (vec PaymentTransaction);
+  getPlayerStats: (playerName: text) -> (opt Player) query;
+  getPoolManagementHistory: () ->
+   (variant {
+      err: text;
+      ok: vec TokenTransaction;
+    }) query;
+  getPriceFeed: (source: text) -> (opt PriceFeed);
+  getPriceFeeds: () -> (vec PriceFeed);
+  getRealTimePoolBalances: () ->
+   (variant {
+      err: text;
+      ok: vec TokenPool;
+    }) query;
+  getTeam: (teamId: nat) -> (opt Team) query;
+  getTokenPool: (name: text) -> (opt TokenPool);
+  getTokenPools: () -> (vec TokenPool);
+  getTokenTransaction: (id: nat) -> (opt TokenTransaction);
+  getTokenTransactions: () -> (vec TokenTransaction);
+  getTotalSupply: () -> (nat);
+  getTotalSupplyStatus: () -> (variant {
+                                 err: text;
+                                 ok: nat;
+                               }) query;
+  getUserBalance: (user: principal) -> (nat);
+  getUserProfile: (user: principal) -> (opt UserProfile) query;
+  getWallet: (user: principal) -> (opt Wallet) query;
+  initializeAccessControl: () -> ();
+  initializeWallet: (_icpAccountId: text, stkPrincipalId: text) ->
+   (variant {
+      err: text;
+      ok;
+    });
+  inviteToTeam: (teamId: nat, invitee: principal) -> ();
+  isCallerAdmin: () -> (bool) query;
+  leaveTeam: (teamId: nat) -> ();
+  listFileReferences: () -> (vec FileReference) query;
+  loginUser: () -> (variant {
+                      err: text;
+                      ok;
+                    });
+  mintStkTokens: (icpAmount: nat, stkAmount: nat, exchangeRate: nat,
+   icpBlockHeight: nat) -> (variant {
+                              err: text;
+                              ok;
+                            });
+  receiveStkTokens: (amount: nat) -> (variant {
+                                        err: text;
+                                        ok;
+                                      });
+  recomputeMyAccountId: () -> (variant {
+                                 err: text;
+                                 ok: text;
+                               });
+  recordIcpSend: (recipientAccountId: text, amount: nat, blockHeight: 
+   nat) -> (variant {
+              err: text;
+              ok;
+            });
+  recordPaymentTransaction: (user: principal, icpAmount: nat, exchangeRate:
+   nat, status: text, reference: opt text) -> (nat);
+  recordTokenTransaction: (from: opt principal, to: opt principal, amount:
+   nat, transactionType: text, pool: opt text, status: text, reference:
+   opt text) -> (nat);
+  registerFileReference: (path: text, hash: text) -> ();
+  requestToJoinTeam: (teamId: nat) -> ();
+  saveCallerUserProfile: (profile: UserProfile) -> ();
+  saveGame: (players: vec Player, frames: vec vec Frame, totalScores:
+   vec nat, owner: opt principal) -> (nat);
+  sendMessage: (sender: text, message: text, gameId: nat) -> ();
+  sendStkTokens: (recipient: text, amount: nat) -> (variant {
+                                                      err: text;
+                                                      ok;
+                                                    });
+  setAdminIcpWallet: (address: text) -> (variant {
+                                           err: text;
+                                           ok;
+                                         });
+  setAdminTreasuryAccount: (accountId: text) -> (variant {
+                                                   err: text;
+                                                   ok;
+                                                 });
+  setLedgerPrincipal: (p: principal) -> (variant {
+                                           err: text;
+                                           ok;
+                                         });
+  transferTokensBetweenPools: (sourcePool: text, destinationPool: text,
+   amount: nat) -> (variant {
+                      err: text;
+                      ok;
+                    });
+  transform: (input: TransformationInput) -> (TransformationOutput) query;
+  updateCallerAchievements: (achievements: vec text) -> ();
+  updateCallerProfilePicture: (picturePath: text) -> ();
+  updateCallerUserProfileStats: (totalSpares: nat, totalStrikes: nat,
+   totalPoints: nat, highestScore: nat, gamesPlayed: nat) -> ();
+  updateCallerWallet: (stkBalance: nat) -> (variant {
+                                              err: text;
+                                              ok;
+                                            });
+  updatePlayerStats: (name: text, totalSpares: nat, totalStrikes: nat,
+   totalPoints: nat, highestScore: nat, gamesPlayed: nat) -> ();
+  updatePriceFeed: (source: text, icpUsd: nat, status: text) -> ();
+  updateTeamStats: (teamId: nat, averageScore: nat, totalGames: nat,
+   bestScore: nat) -> ();
+  updateTokenPool: (name: text, remaining: nat) -> ();
+  updateTotalSupply: (amount: nat) -> ();
+  updateUserBalance: (user: principal, amount: nat) -> ();
+  verifyIcpPayment: (accountIdText: text) -> (variant {
+                                                err: text;
+                                                ok: nat;
+                                              });
+}

@@ -1,0 +1,1502 @@
+import Map "mo:core/Map";
+import Array "mo:core/Array";
+import Text "mo:core/Text";
+import Time "mo:core/Time";
+import Nat "mo:core/Nat";
+import Principal "mo:core/Principal";
+import Blob "mo:core/Blob";
+import Nat64 "mo:core/Nat64";
+import Int "mo:core/Int";
+import Debug "mo:core/Debug";
+import Nat8 "mo:core/Nat8";
+import Error "mo:core/Error";
+import Runtime "mo:core/Runtime";
+import AccessControl "mo:caffeineai-authorization/access-control";
+import MixinAuthorization "mo:caffeineai-authorization/MixinAuthorization";
+import MixinObjectStorage "mo:caffeineai-object-storage/Mixin";
+import OutCall "mo:caffeineai-http-outcalls/outcall";
+import Sha224 "Sha224";
+
+
+
+actor BowlingScoreTracker {
+
+  // ===== INTERNAL TYPES FOR LEDGER (Nat64 ONLY here, never exposed publicly) =====
+  type LedgerTokens = { e8s : Nat64 };
+
+  type TransferError = {
+    #BadFee : { expected_fee : { e8s : Nat64 } };
+    #BadSender;
+    #InsufficientFunds : { balance : { e8s : Nat64 } };
+    #TxTooOld : { allowed_window_nanos : Nat64 };
+    #TxCreatedInFuture;
+    #TxDuplicate : { duplicate_of : Nat64 };
+    #GenericError : { error_code : Nat64; message : Text };
+    #TemporarilyUnavailable;
+  };
+
+  type TransferResult = { #ok : Nat64; #err : TransferError };
+
+  type Ledger = actor {
+    account_balance : shared { account : Blob } -> async LedgerTokens;
+    transfer : shared {
+      memo : Nat64;
+      amount : { e8s : Nat64 };
+      fee : { e8s : Nat64 };
+      from_subaccount : ?Blob;
+      to : Blob;
+      created_at_time : ?{ timestamp_nanos : Nat64 };
+    } -> async TransferResult;
+  };
+
+  // ===== PUBLIC TYPES (no Nat64) =====
+
+  type Player = {
+    name : Text;
+    scores : [Nat];
+    averageScore : Nat;
+    totalSpares : Nat;
+    totalStrikes : Nat;
+    totalPoints : Nat;
+    highestScore : Nat;
+    gamesPlayed : Nat;
+  };
+
+  type Frame = {
+    roll1 : Nat;
+    roll2 : Nat;
+    roll3 : ?Nat;
+    score : Nat;
+  };
+
+  type Game = {
+    id : Nat;
+    players : [Player];
+    frames : [[Frame]];
+    timestamp : Int;
+    totalScores : [Nat];
+    owner : ?Principal;
+  };
+
+  type ChatMessage = {
+    sender : Text;
+    message : Text;
+    timestamp : Int;
+    gameId : Nat;
+  };
+
+  type UserProfile = {
+    principal : Principal;
+    displayName : Text;
+    games : [Nat];
+    achievements : [Text];
+    averageScore : Nat;
+    totalSpares : Nat;
+    totalStrikes : Nat;
+    totalPoints : Nat;
+    highestScore : Nat;
+    gamesPlayed : Nat;
+    profilePicture : ?Text;
+  };
+
+  type Team = {
+    id : Nat;
+    name : Text;
+    description : Text;
+    creator : Principal;
+    members : [Principal];
+    averageScore : Nat;
+    totalGames : Nat;
+    bestScore : Nat;
+    createdAt : Int;
+  };
+
+  type JoinRequest = {
+    teamId : Nat;
+    requester : Principal;
+    timestamp : Int;
+  };
+
+  type Invitation = {
+    teamId : Nat;
+    invitee : Principal;
+    inviter : Principal;
+    timestamp : Int;
+  };
+
+  type TokenPool = {
+    name : Text;
+    total : Nat;
+    remaining : Nat;
+  };
+
+  // PUBLIC: no Nat64 anywhere
+  type TokenTransaction = {
+    id : Nat;
+    from : ?Principal;
+    to : ?Principal;
+    amount : Nat;
+    timestamp : Int;
+    transactionType : Text;
+    pool : ?Text;
+    status : Text;
+    reference : ?Text;
+    ledgerHeight : ?Nat;
+  };
+
+  // PUBLIC: icpAmount is Nat (not Nat64)
+  type PaymentTransaction = {
+    id : Nat;
+    user : Principal;
+    icpAmount : Nat;
+    stkAmount : Nat;
+    exchangeRate : Nat;
+    timestamp : Int;
+    status : Text;
+    reference : ?Text;
+  };
+
+  type PriceFeed = {
+    source : Text;
+    icpUsd : Nat;
+    lastUpdated : Int;
+    status : Text;
+  };
+
+  // PUBLIC: icpAccountId is Text
+  type Wallet = {
+    stkBalance : Nat;
+    icpTransactions : [TokenTransaction];
+    stkTransactions : [TokenTransaction];
+    icpAccountId : Text;
+    stkPrincipalId : Text;
+  };
+
+  // For inline file registry
+  type FileReference = {
+    path : Text;
+    hash : Text;
+  };
+
+  type RegistryState = {
+    var authorizedPrincipals : [Principal];
+    var blobsToRemove : Map.Map<Text, Bool>;
+    var references : Map.Map<Text, FileReference>;
+  };
+
+  // ===== STATE =====
+
+  // ===== STABLE SHADOW VARIABLES =====
+  // With --default-persistent-actors, all actor state is implicitly stable.
+  // These vars serve as explicit named state anchors for documentation and
+  // future migration if --default-persistent-actors is ever removed.
+  var _stable_nextGameId : Nat = 0;
+  var _stable_nextTeamId : Nat = 0;
+  var _stable_nextTransactionId : Nat = 0;
+  var _stable_nextPaymentId : Nat = 0;
+  var _stable_totalSupply : Nat = 1000000;
+  var _stable_isInitialized : Bool = false;
+  var _stable_chatMessages : [ChatMessage] = [];
+  var _stable_joinRequests : [JoinRequest] = [];
+  var _stable_invitations : [Invitation] = [];
+  var _stable_ledgerPrincipal : ?Principal = ?Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+  var _stable_adminIcpWallet : ?Text = null;
+
+  var nextGameId = 0;
+  var nextTeamId = 0;
+  var nextTransactionId = 0;
+  var nextPaymentId = 0;
+  let games = Map.empty<Text, Game>();
+  let playerStats = Map.empty<Text, Player>();
+  var chatMessages : [ChatMessage] = [];
+  let userProfiles = Map.empty<Principal, UserProfile>();
+  let teams = Map.empty<Nat, Team>();
+  var joinRequests : [JoinRequest] = [];
+  var invitations : [Invitation] = [];
+  let tokenPools = Map.empty<Text, TokenPool>();
+  let tokenTransactions = Map.empty<Nat, TokenTransaction>();
+  let paymentTransactions = Map.empty<Nat, PaymentTransaction>();
+  let priceFeeds = Map.empty<Text, PriceFeed>();
+  let userBalances = Map.empty<Principal, Nat>();
+  let userWallets = Map.empty<Principal, Wallet>();
+  var totalSupply = 1000000;
+  var isInitialized = false;
+  var ledgerPrincipal : ?Principal = ?Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+  var adminIcpWallet : ?Text = null;
+
+  let accessControlState = AccessControl.initState();
+
+  // ===== AUTO-INITIALIZATION HELPERS =====
+
+  func ensureLedgerPrincipal() {
+    switch (ledgerPrincipal) {
+      case null {
+        ledgerPrincipal := ?Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+      };
+      case (?_) {};
+    };
+  };
+
+  func ensureTokenPools() {
+    if (not isInitialized) {
+      initializeTokenPools();
+    };
+  };
+
+  // ===== SYSTEM HOOKS =====
+
+  system func preupgrade() {
+    _stable_nextGameId := nextGameId;
+    _stable_nextTeamId := nextTeamId;
+    _stable_nextTransactionId := nextTransactionId;
+    _stable_nextPaymentId := nextPaymentId;
+    _stable_totalSupply := totalSupply;
+    _stable_isInitialized := isInitialized;
+    _stable_chatMessages := chatMessages;
+    _stable_joinRequests := joinRequests;
+    _stable_invitations := invitations;
+    _stable_ledgerPrincipal := ledgerPrincipal;
+    _stable_adminIcpWallet := adminIcpWallet;
+  };
+
+  system func postupgrade() {
+    nextGameId := _stable_nextGameId;
+    nextTeamId := _stable_nextTeamId;
+    nextTransactionId := _stable_nextTransactionId;
+    nextPaymentId := _stable_nextPaymentId;
+    totalSupply := _stable_totalSupply;
+    isInitialized := _stable_isInitialized;
+    chatMessages := _stable_chatMessages;
+    joinRequests := _stable_joinRequests;
+    invitations := _stable_invitations;
+    ledgerPrincipal := _stable_ledgerPrincipal;
+    adminIcpWallet := _stable_adminIcpWallet;
+    ensureLedgerPrincipal();
+    ensureTokenPools();
+  };
+
+  let registry : RegistryState = {
+    var authorizedPrincipals = [];
+    var blobsToRemove = Map.empty<Text, Bool>();
+    var references = Map.empty<Text, FileReference>();
+  };
+
+  // ===== CONVERSION HELPERS (Nat <-> Nat64 at ledger boundary only) =====
+
+  func nat64ToNat(n64 : Nat64) : Nat { n64.toNat() };
+
+  // Max Nat64 value: 2^64 - 1 = 18446744073709551615
+  let _nat64Max : Nat = 18446744073709551615;
+
+  func _natToNat64Safe(n : Nat) : { #ok : Nat64; #err : Text } {
+    if (n > _nat64Max) { #err("Value cannot be represented as Nat64") }
+    else { #ok(Nat64.fromNat(n)) };
+  };
+
+  // ===== LEDGER HELPER =====
+
+  func getLedger() : { #ok : Ledger; #err : Text } {
+    switch (ledgerPrincipal) {
+      case (?p) #ok(actor (p.toText()) : Ledger);
+      case null #err("Ledger principal not configured");
+    };
+  };
+
+  // ===== HEX TO BLOB CONVERSION =====
+
+  func hexToAccountIdBlob(hex : Text) : { #ok : Blob; #err : Text } {
+    let chars = hex.toArray();
+    if (chars.size() != 64) {
+      return #err("Invalid hex string length: expected 64 characters");
+    };
+    let bytes : [var Nat8] = [var
+      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+      0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    ];
+    var i = 0;
+    label conversionLoop while (i < 32) {
+      let hiChar = chars[i * 2];
+      let loChar = chars[i * 2 + 1];
+      let hiVal : Nat = switch (hiChar) {
+        case '0' 0; case '1' 1; case '2' 2; case '3' 3; case '4' 4;
+        case '5' 5; case '6' 6; case '7' 7; case '8' 8; case '9' 9;
+        case 'a' 10; case 'b' 11; case 'c' 12; case 'd' 13; case 'e' 14; case 'f' 15;
+        case 'A' 10; case 'B' 11; case 'C' 12; case 'D' 13; case 'E' 14; case 'F' 15;
+        case _ { return #err("Invalid hex character") };
+      };
+      let loVal : Nat = switch (loChar) {
+        case '0' 0; case '1' 1; case '2' 2; case '3' 3; case '4' 4;
+        case '5' 5; case '6' 6; case '7' 7; case '8' 8; case '9' 9;
+        case 'a' 10; case 'b' 11; case 'c' 12; case 'd' 13; case 'e' 14; case 'f' 15;
+        case 'A' 10; case 'B' 11; case 'C' 12; case 'D' 13; case 'E' 14; case 'F' 15;
+        case _ { return #err("Invalid hex character") };
+      };
+      bytes[i] := Nat8.fromNat(hiVal * 16 + loVal);
+      i += 1;
+    };
+    #ok(Blob.fromVarArray(bytes));
+  };
+
+  // ===== SAFE SUBTRACTION =====
+
+  func safeSub(a : Nat, b : Nat) : Nat {
+    if (a < b) 0 else a - b;
+  };
+
+  // ===== TOKEN POOL INITIALIZATION =====
+
+  func initializeTokenPools() {
+    if (not isInitialized) {
+      tokenPools.add("Treasury Reserves", { name = "Treasury Reserves"; total = 400000; remaining = 400000 });
+      tokenPools.add("Minting Platform", { name = "Minting Platform"; total = 200000; remaining = 200000 });
+      tokenPools.add("In-Game Rewards", { name = "In-Game Rewards"; total = 150000; remaining = 150000 });
+      tokenPools.add("Admin Team Wallet", { name = "Admin Team Wallet"; total = 150000; remaining = 150000 });
+      tokenPools.add("NFT Staking Rewards", { name = "NFT Staking Rewards"; total = 100000; remaining = 100000 });
+      isInitialized := true;
+    };
+  };
+
+  // ===== ACCESS CONTROL =====
+
+  include MixinAuthorization(accessControlState);
+  include MixinObjectStorage();
+
+  public shared ({ caller }) func initializeAccessControl() : async () {
+    AccessControl.initialize(accessControlState, caller);
+    initializeTokenPools();
+  };
+
+  // ===== LOGIN (first user to call becomes admin) =====
+
+  public shared ({ caller }) func loginUser() : async { #ok : (); #err : Text } {
+    if (caller.isAnonymous()) {
+      return #err("Anonymous callers cannot log in");
+    };
+    // First caller with no existing roles gets initialized as admin
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin) and
+        not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      AccessControl.initialize(accessControlState, caller);
+    };
+    #ok(());
+  };
+
+  // ===== LEDGER PRINCIPAL MANAGEMENT =====
+
+  public shared ({ caller }) func setLedgerPrincipal(p : Principal) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized");
+    };
+    ledgerPrincipal := ?p;
+    #ok(());
+  };
+
+  public query ({ caller }) func getLedgerPrincipal() : async { #ok : Principal; #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized");
+    };
+    switch (ledgerPrincipal) {
+      case (?p) #ok(p);
+      case null #err("Ledger principal not configured");
+    };
+  };
+
+  // ===== ADMIN ICP WALLET / TREASURY MANAGEMENT =====
+  // The admin treasury is where users send ICP when purchasing STK tokens.
+  // The frontend uses the user's agent to transfer ICP directly to this address.
+
+  public shared ({ caller }) func setAdminIcpWallet(address : Text) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can set admin ICP wallet");
+    };
+    if (address.size() == 0) {
+      return #err("Address cannot be empty");
+    };
+    adminIcpWallet := ?address;
+    #ok(());
+  };
+
+  // Alias for setAdminIcpWallet — sets the admin treasury account for minting payments.
+  public shared ({ caller }) func setAdminTreasuryAccount(accountId : Text) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized");
+    };
+    if (accountId.size() == 0) {
+      return #err("Account ID cannot be empty");
+    };
+    adminIcpWallet := ?accountId;
+    #ok(());
+  };
+
+  public query func getAdminIcpWallet() : async ?Text {
+    adminIcpWallet;
+  };
+
+  // Returns the admin treasury address where users should send ICP for minting.
+  public query func getAdminTreasuryAddress() : async ?Text {
+    adminIcpWallet;
+  };
+
+  public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
+    userProfiles.get(caller);
+  };
+
+  public query func getUserProfile(user : Principal) : async ?UserProfile {
+    userProfiles.get(user);
+  };
+
+  public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can save profiles");
+    };
+    userProfiles.add(caller, { profile with principal = caller });
+  };
+
+  public query func getAllUserProfiles() : async [UserProfile] {
+    userProfiles.values().toArray();
+  };
+
+  public shared ({ caller }) func updateCallerAchievements(achievements : [Text]) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can update achievements");
+    };
+    switch (userProfiles.get(caller)) {
+      case (?profile) {
+        userProfiles.add(caller, { profile with achievements });
+      };
+      case null {};
+    };
+  };
+
+  public shared ({ caller }) func updateCallerUserProfileStats(totalSpares : Nat, totalStrikes : Nat, totalPoints : Nat, highestScore : Nat, gamesPlayed : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can update profile stats");
+    };
+    switch (userProfiles.get(caller)) {
+      case (?profile) {
+        userProfiles.add(caller, { profile with totalSpares; totalStrikes; totalPoints; highestScore; gamesPlayed });
+      };
+      case null {};
+    };
+  };
+
+  public shared ({ caller }) func updateCallerProfilePicture(picturePath : Text) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can update profile pictures");
+    };
+    switch (userProfiles.get(caller)) {
+      case (?profile) {
+        userProfiles.add(caller, { profile with profilePicture = ?picturePath });
+      };
+      case null {};
+    };
+  };
+
+  // ===== GAME ENGINE =====
+
+  public func saveGame(players : [Player], frames : [[Frame]], totalScores : [Nat], owner : ?Principal) : async Nat {
+    let gameId = nextGameId;
+    nextGameId += 1;
+
+    let game : Game = {
+      id = gameId;
+      players;
+      frames;
+      timestamp = Time.now();
+      totalScores;
+      owner;
+    };
+
+    games.add(gameId.toText(), game);
+
+    for (player in players.values()) {
+      let existingPlayer = playerStats.get(player.name);
+      let updatedScores = switch (existingPlayer) {
+        case (?p) p.scores.concat(player.scores);
+        case null player.scores;
+      };
+      let total = updatedScores.foldLeft(0, func(acc : Nat, score : Nat) : Nat { acc + score });
+      let average = if (updatedScores.size() > 0) total / updatedScores.size() else 0;
+
+      let updatedPlayer : Player = {
+        name = player.name;
+        scores = updatedScores;
+        averageScore = average;
+        totalSpares = switch (existingPlayer) { case (?p) p.totalSpares; case null 0 };
+        totalStrikes = switch (existingPlayer) { case (?p) p.totalStrikes; case null 0 };
+        totalPoints = switch (existingPlayer) { case (?p) p.totalPoints; case null 0 };
+        highestScore = switch (existingPlayer) { case (?p) p.highestScore; case null 0 };
+        gamesPlayed = switch (existingPlayer) { case (?p) p.gamesPlayed; case null 0 };
+      };
+      playerStats.add(player.name, updatedPlayer);
+    };
+
+    switch (owner) {
+      case (?principal) {
+        let existingProfile = userProfiles.get(principal);
+        let updatedGames = switch (existingProfile) {
+          case (?profile) profile.games.concat([gameId]);
+          case null [gameId];
+        };
+        let totalScoreSum = totalScores.foldLeft(0, func(acc : Nat, score : Nat) : Nat { acc + score });
+        let averageScore = if (totalScores.size() > 0) totalScoreSum / totalScores.size() else 0;
+
+        let updatedProfile : UserProfile = {
+          principal;
+          displayName = switch (existingProfile) { case (?p) p.displayName; case null principal.toText() };
+          games = updatedGames;
+          achievements = switch (existingProfile) { case (?p) p.achievements; case null [] };
+          averageScore;
+          totalSpares = switch (existingProfile) { case (?p) p.totalSpares; case null 0 };
+          totalStrikes = switch (existingProfile) { case (?p) p.totalStrikes; case null 0 };
+          totalPoints = switch (existingProfile) { case (?p) p.totalPoints; case null 0 };
+          highestScore = switch (existingProfile) { case (?p) p.highestScore; case null 0 };
+          gamesPlayed = switch (existingProfile) { case (?p) p.gamesPlayed; case null 0 };
+          profilePicture = switch (existingProfile) { case (?p) p.profilePicture; case null null };
+        };
+        userProfiles.add(principal, updatedProfile);
+      };
+      case null {};
+    };
+
+    gameId;
+  };
+
+  public query func getGame(gameId : Nat) : async ?Game {
+    games.get(gameId.toText());
+  };
+
+  public query func getAllGames() : async [Game] {
+    games.values().toArray();
+  };
+
+  public query func getPlayerStats(playerName : Text) : async ?Player {
+    playerStats.get(playerName);
+  };
+
+  public query func getAllPlayerStats() : async [Player] {
+    playerStats.values().toArray();
+  };
+
+  public query func getLeaderboard() : async [Player] {
+    playerStats.values().toArray().sort(
+      func(a : Player, b : Player) : { #less; #equal; #greater } {
+        if (a.averageScore > b.averageScore) { #less }
+        else if (a.averageScore < b.averageScore) { #greater }
+        else { #equal };
+      }
+    );
+  };
+
+  public func updatePlayerStats(name : Text, totalSpares : Nat, totalStrikes : Nat, totalPoints : Nat, highestScore : Nat, gamesPlayed : Nat) : async () {
+    switch (playerStats.get(name)) {
+      case (?player) {
+        playerStats.add(name, { player with totalSpares; totalStrikes; totalPoints; highestScore; gamesPlayed });
+      };
+      case null {};
+    };
+  };
+
+  // ===== CHAT =====
+
+  public func sendMessage(sender : Text, message : Text, gameId : Nat) : async () {
+    let chatMessage : ChatMessage = {
+      sender;
+      message;
+      timestamp = Time.now();
+      gameId;
+    };
+    chatMessages := chatMessages.concat([chatMessage]);
+  };
+
+  public query func getMessages(gameId : Nat) : async [ChatMessage] {
+    chatMessages.filter(func(msg : ChatMessage) : Bool { msg.gameId == gameId });
+  };
+
+  public query func getAllMessages() : async [ChatMessage] {
+    chatMessages;
+  };
+
+  // ===== TEAMS =====
+
+  public shared ({ caller }) func createTeam(name : Text, description : Text) : async Nat {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can create teams");
+    };
+    let teamId = nextTeamId;
+    nextTeamId += 1;
+
+    teams.add(teamId, {
+      id = teamId;
+      name;
+      description;
+      creator = caller;
+      members = [caller];
+      averageScore = 0;
+      totalGames = 0;
+      bestScore = 0;
+      createdAt = Time.now();
+    });
+    teamId;
+  };
+
+  public shared ({ caller }) func requestToJoinTeam(teamId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can request to join teams");
+    };
+    joinRequests := joinRequests.concat([{ teamId; requester = caller; timestamp = Time.now() }]);
+  };
+
+  public shared ({ caller }) func approveJoinRequest(teamId : Nat, requester : Principal) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can approve join requests");
+    };
+    switch (teams.get(teamId)) {
+      case (?team) {
+        if (team.creator != caller) {
+          Runtime.trap("Unauthorized: Only the team creator can approve join requests");
+        };
+        teams.add(teamId, { team with members = team.members.concat([requester]) });
+        joinRequests := joinRequests.filter(func(req : JoinRequest) : Bool {
+          not (req.teamId == teamId and req.requester == requester)
+        });
+      };
+      case null {};
+    };
+  };
+
+  public shared ({ caller }) func denyJoinRequest(teamId : Nat, requester : Principal) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can deny join requests");
+    };
+    switch (teams.get(teamId)) {
+      case (?team) {
+        if (team.creator != caller) {
+          Runtime.trap("Unauthorized: Only the team creator can deny join requests");
+        };
+        joinRequests := joinRequests.filter(func(req : JoinRequest) : Bool {
+          not (req.teamId == teamId and req.requester == requester)
+        });
+      };
+      case null {};
+    };
+  };
+
+  public shared ({ caller }) func inviteToTeam(teamId : Nat, invitee : Principal) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can invite to teams");
+    };
+    switch (teams.get(teamId)) {
+      case (?team) {
+        if (team.creator != caller) {
+          Runtime.trap("Unauthorized: Only the team creator can invite members");
+        };
+        invitations := invitations.concat([{ teamId; invitee; inviter = caller; timestamp = Time.now() }]);
+      };
+      case null {};
+    };
+  };
+
+  public shared ({ caller }) func acceptInvitation(teamId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can accept invitations");
+    };
+    switch (teams.get(teamId)) {
+      case (?team) {
+        teams.add(teamId, { team with members = team.members.concat([caller]) });
+        invitations := invitations.filter(func(inv : Invitation) : Bool {
+          not (inv.teamId == teamId and inv.invitee == caller)
+        });
+      };
+      case null {};
+    };
+  };
+
+  public shared ({ caller }) func declineInvitation(teamId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can decline invitations");
+    };
+    invitations := invitations.filter(func(inv : Invitation) : Bool {
+      not (inv.teamId == teamId and inv.invitee == caller)
+    });
+  };
+
+  public shared ({ caller }) func leaveTeam(teamId : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can leave teams");
+    };
+    switch (teams.get(teamId)) {
+      case (?team) {
+        teams.add(teamId, { team with members = team.members.filter(func(m : Principal) : Bool { m != caller }) });
+      };
+      case null {};
+    };
+  };
+
+  public query func getTeam(teamId : Nat) : async ?Team {
+    teams.get(teamId);
+  };
+
+  public query func getAllTeams() : async [Team] {
+    teams.values().toArray();
+  };
+
+  public query func getJoinRequests() : async [JoinRequest] {
+    joinRequests;
+  };
+
+  public query func getInvitations() : async [Invitation] {
+    invitations;
+  };
+
+  public func updateTeamStats(teamId : Nat, averageScore : Nat, totalGames : Nat, bestScore : Nat) : async () {
+    switch (teams.get(teamId)) {
+      case (?team) {
+        teams.add(teamId, { team with averageScore; totalGames; bestScore });
+      };
+      case null {};
+    };
+  };
+
+  // ===== TOKEN POOLS =====
+
+  public func getTokenPools() : async [TokenPool] {
+    initializeTokenPools();
+    tokenPools.values().toArray();
+  };
+
+  public func getTokenPool(name : Text) : async ?TokenPool {
+    initializeTokenPools();
+    tokenPools.get(name);
+  };
+
+  public func updateTokenPool(name : Text, remaining : Nat) : async () {
+    switch (tokenPools.get(name)) {
+      case (?pool) {
+        tokenPools.add(name, { pool with remaining });
+      };
+      case null {};
+    };
+  };
+
+  // ===== TOKEN TRANSACTIONS =====
+
+  public func recordTokenTransaction(from : ?Principal, to : ?Principal, amount : Nat, transactionType : Text, pool : ?Text, status : Text, reference : ?Text) : async Nat {
+    let transactionId = nextTransactionId;
+    nextTransactionId += 1;
+
+    let transaction : TokenTransaction = {
+      id = transactionId;
+      from;
+      to;
+      amount;
+      timestamp = Time.now();
+      transactionType;
+      pool;
+      status;
+      reference;
+      ledgerHeight = null;
+    };
+
+    tokenTransactions.add(transactionId, transaction);
+    transactionId;
+  };
+
+  public func getTokenTransactions() : async [TokenTransaction] {
+    tokenTransactions.values().toArray();
+  };
+
+  public func getTokenTransaction(id : Nat) : async ?TokenTransaction {
+    tokenTransactions.get(id);
+  };
+
+  // ===== PAYMENT TRANSACTIONS =====
+
+  public func recordPaymentTransaction(user : Principal, icpAmount : Nat, exchangeRate : Nat, status : Text, reference : ?Text) : async Nat {
+    let paymentId = nextPaymentId;
+    nextPaymentId += 1;
+
+    let stkAmount = icpAmount * exchangeRate;
+
+    let payment : PaymentTransaction = {
+      id = paymentId;
+      user;
+      icpAmount;
+      stkAmount;
+      exchangeRate;
+      timestamp = Time.now();
+      status;
+      reference;
+    };
+
+    paymentTransactions.add(paymentId, payment);
+
+    let currentBalance = switch (userBalances.get(user)) {
+      case (?balance) balance;
+      case null 0;
+    };
+    userBalances.add(user, currentBalance + stkAmount);
+
+    await creditUserWallet(user, stkAmount);
+
+    switch (tokenPools.get("Minting Platform")) {
+      case (?pool) {
+        tokenPools.add("Minting Platform", { pool with remaining = safeSub(pool.remaining, stkAmount) });
+      };
+      case null {};
+    };
+
+    paymentId;
+  };
+
+  public func getPaymentTransactions() : async [PaymentTransaction] {
+    paymentTransactions.values().toArray();
+  };
+
+  public func getPaymentTransaction(id : Nat) : async ?PaymentTransaction {
+    paymentTransactions.get(id);
+  };
+
+  public func creditUserWallet(user : Principal, stkAmount : Nat) : async () {
+    switch (userWallets.get(user)) {
+      case (?wallet) {
+        userWallets.add(user, { wallet with stkBalance = wallet.stkBalance + stkAmount });
+      };
+      case null {};
+    };
+  };
+
+  // ===== PRICE FEEDS =====
+
+  public func updatePriceFeed(source : Text, icpUsd : Nat, status : Text) : async () {
+    priceFeeds.add(source, { source; icpUsd; lastUpdated = Time.now(); status });
+  };
+
+  public func getPriceFeeds() : async [PriceFeed] {
+    priceFeeds.values().toArray();
+  };
+
+  public func getPriceFeed(source : Text) : async ?PriceFeed {
+    priceFeeds.get(source);
+  };
+
+  // ===== USER BALANCES =====
+
+  public func updateUserBalance(user : Principal, amount : Nat) : async () {
+    userBalances.add(user, amount);
+  };
+
+  public func getUserBalance(user : Principal) : async Nat {
+    switch (userBalances.get(user)) {
+      case (?balance) balance;
+      case null 0;
+    };
+  };
+
+  public func getTotalSupply() : async Nat {
+    totalSupply;
+  };
+
+  public func updateTotalSupply(amount : Nat) : async () {
+    totalSupply := amount;
+  };
+
+  // ===== HTTP OUTCALLS (admin-only for security) =====
+
+  public query func transform(input : OutCall.TransformationInput) : async OutCall.TransformationOutput {
+    OutCall.transform(input);
+  };
+
+  public shared ({ caller }) func fetchIcpPrice(source : Text) : async Text {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return "Unauthorized";
+    };
+    let allowedSources = ["coingecko", "coinmarketcap", "binance", "coinbase", "kraken"];
+    var isAllowed = false;
+    for (s in allowedSources.values()) {
+      if (s == source) { isAllowed := true };
+    };
+    if (not isAllowed) {
+      return "Invalid price source";
+    };
+    let url = switch (source) {
+      case "coingecko" "https://api.coingecko.com/api/v3/simple/price?ids=internet-computer&vs_currencies=usd";
+      case "coinmarketcap" "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=ICP&convert=USD";
+      case "binance" "https://api.binance.com/api/v3/ticker/price?symbol=ICPUSDT";
+      case "coinbase" "https://api.coinbase.com/v2/prices/ICP-USD/spot";
+      case "kraken" "https://api.kraken.com/0/public/Ticker?pair=ICPUSD";
+      case _ "https://api.coingecko.com/api/v3/simple/price?ids=internet-computer&vs_currencies=usd";
+    };
+    try {
+      await OutCall.httpGetRequest(url, [], transform);
+    } catch (e) {
+      Debug.print("fetchIcpPrice error: " # e.message());
+      "Internal error fetching price";
+    };
+  };
+
+  // ===== ADMIN POOL MANAGEMENT =====
+
+  public shared ({ caller }) func transferTokensBetweenPools(sourcePool : Text, destinationPool : Text, amount : Nat) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can perform this action");
+    };
+    initializeTokenPools();
+    switch (tokenPools.get(sourcePool), tokenPools.get(destinationPool)) {
+      case (?src, ?dest) {
+        if (src.remaining < amount) {
+          return #err("Insufficient balance in source pool");
+        };
+        tokenPools.add(sourcePool, { src with remaining = safeSub(src.remaining, amount) });
+        tokenPools.add(destinationPool, { dest with remaining = dest.remaining + amount });
+
+        let transactionId = nextTransactionId;
+        nextTransactionId += 1;
+        tokenTransactions.add(transactionId, {
+          id = transactionId;
+          from = null;
+          to = null;
+          amount;
+          timestamp = Time.now();
+          transactionType = "Pool Transfer";
+          pool = ?sourcePool;
+          status = "Completed";
+          reference = ?("Transferred to " # destinationPool);
+          ledgerHeight = null;
+        });
+        #ok(());
+      };
+      case (null, _) { #err("Source pool not found") };
+      case (_, null) { #err("Destination pool not found") };
+    };
+  };
+
+  public shared ({ caller }) func adjustPoolAllocation(poolName : Text, newTotal : Nat) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can perform this action");
+    };
+    initializeTokenPools();
+    switch (tokenPools.get(poolName)) {
+      case (?pool) {
+        let difference = if (newTotal > pool.total) safeSub(newTotal, pool.total) else safeSub(pool.total, newTotal);
+        let updatedRemaining = if (newTotal > pool.total) {
+          pool.remaining + difference;
+        } else {
+          safeSub(pool.remaining, difference);
+        };
+        tokenPools.add(poolName, { pool with total = newTotal; remaining = updatedRemaining });
+
+        let transactionId = nextTransactionId;
+        nextTransactionId += 1;
+        tokenTransactions.add(transactionId, {
+          id = transactionId;
+          from = null;
+          to = null;
+          amount = difference;
+          timestamp = Time.now();
+          transactionType = "Pool Adjustment";
+          pool = ?poolName;
+          status = "Completed";
+          reference = ?("Adjusted total to " # newTotal.toText());
+          ledgerHeight = null;
+        });
+        #ok(());
+      };
+      case null { #err("Pool not found") };
+    };
+  };
+
+  public query ({ caller }) func getAdminAuditTrail() : async { #ok : [TokenTransaction]; #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can perform this action");
+    };
+    let txs = tokenTransactions.values().toArray();
+    #ok(txs.sort(func(a : TokenTransaction, b : TokenTransaction) : { #less; #equal; #greater } {
+      if (a.timestamp > b.timestamp) { #less }
+      else if (a.timestamp < b.timestamp) { #greater }
+      else { #equal };
+    }));
+  };
+
+  public query ({ caller }) func getPoolManagementHistory() : async { #ok : [TokenTransaction]; #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can perform this action");
+    };
+    let filtered = tokenTransactions.values().toArray().filter(func(tx : TokenTransaction) : Bool {
+      tx.transactionType == "Pool Transfer" or tx.transactionType == "Pool Adjustment"
+    });
+    #ok(filtered.sort(func(a : TokenTransaction, b : TokenTransaction) : { #less; #equal; #greater } {
+      if (a.timestamp > b.timestamp) { #less }
+      else if (a.timestamp < b.timestamp) { #greater }
+      else { #equal };
+    }));
+  };
+
+  public query ({ caller }) func getRealTimePoolBalances() : async { #ok : [TokenPool]; #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can perform this action");
+    };
+    initializeTokenPools();
+    #ok(tokenPools.values().toArray());
+  };
+
+  public query ({ caller }) func getTotalSupplyStatus() : async { #ok : Nat; #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can perform this action");
+    };
+    #ok(totalSupply);
+  };
+
+  // ===== WALLET MANAGEMENT =====
+
+  public shared ({ caller }) func initializeWallet(_icpAccountId : Text, stkPrincipalId : Text) : async { #ok : (); #err : Text } {
+    // Auto-assign the first user as admin if no admins exist yet
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin) and
+        not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      AccessControl.initialize(accessControlState, caller);
+    };
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return #err("Unauthorized: Only users can initialize wallets");
+    };
+    // Ensure token pools are initialized on first wallet creation
+    if (not isInitialized) {
+      initializeTokenPools();
+    };
+    // Always derive the canonical account ID from the caller's Principal so it
+    // is permanently tied to their Internet Identity and never changes between deploys.
+    let canonicalAccountId = Sha224.deriveAccountId(caller);
+    switch (userWallets.get(caller)) {
+      case (?_) { #err("Wallet already exists") };
+      case null {
+        userWallets.add(caller, {
+          stkBalance = 0;
+          icpTransactions = [];
+          stkTransactions = [];
+          icpAccountId = canonicalAccountId;
+          stkPrincipalId;
+        });
+        #ok(());
+      };
+    };
+  };
+
+  public query ({ caller }) func getCallerWallet() : async ?Wallet {
+    userWallets.get(caller);
+  };
+
+  // Returns the canonical ICP account ID derived from the caller's Principal.
+  // This is the stable, permanent address tied to the user's Internet Identity.
+  public query ({ caller }) func getCallerDerivedAccountId() : async Text {
+    Sha224.deriveAccountId(caller);
+  };
+
+  // Re-derives the canonical account ID from the caller's Principal and updates the
+  // stored wallet.icpAccountId. Call this if a wallet was initialized with an incorrect
+  // account ID from a previous deploy.
+  public shared ({ caller }) func recomputeMyAccountId() : async { #ok : Text; #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return #err("Unauthorized: Only users can recompute their account ID");
+    };
+    let canonicalAccountId = Sha224.deriveAccountId(caller);
+    switch (userWallets.get(caller)) {
+      case (?wallet) {
+        userWallets.add(caller, { wallet with icpAccountId = canonicalAccountId });
+        #ok(canonicalAccountId);
+      };
+      case null { #err("Wallet not found. Please initialize your wallet first.") };
+    };
+  };
+
+  public query func getWallet(user : Principal) : async ?Wallet {
+    userWallets.get(user);
+  };
+
+  public shared ({ caller }) func updateCallerWallet(stkBalance : Nat) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return #err("Unauthorized: Only users can update wallets");
+    };
+    switch (userWallets.get(caller)) {
+      case (?wallet) {
+        userWallets.add(caller, { wallet with stkBalance });
+        #ok(());
+      };
+      case null { #err("Wallet not found") };
+    };
+  };
+
+  public shared ({ caller }) func addIcpTransaction(transaction : TokenTransaction) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return #err("Unauthorized: Only users can add transactions");
+    };
+    switch (userWallets.get(caller)) {
+      case (?wallet) {
+        userWallets.add(caller, { wallet with icpTransactions = wallet.icpTransactions.concat([transaction]) });
+        #ok(());
+      };
+      case null { #err("Wallet not found") };
+    };
+  };
+
+  public shared ({ caller }) func addStkTransaction(transaction : TokenTransaction) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return #err("Unauthorized: Only users can add transactions");
+    };
+    switch (userWallets.get(caller)) {
+      case (?wallet) {
+        userWallets.add(caller, { wallet with stkTransactions = wallet.stkTransactions.concat([transaction]) });
+        #ok(());
+      };
+      case null { #err("Wallet not found") };
+    };
+  };
+
+  // ===== ICP BALANCE (public boundary: Nat, accepts Text hex account ID) =====
+  public shared ({ caller }) func getCallerIcpBalance(accountIdText : Text) : async { #ok : Nat; #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return #err("Unauthorized: Only users can check balances");
+    };
+    switch (hexToAccountIdBlob(accountIdText)) {
+      case (#err(_)) { return #err("Invalid account ID format") };
+      case (#ok(accountBlob)) {
+        switch (getLedger()) {
+          case (#err(msg)) { return #err(msg) };
+          case (#ok(ledger)) {
+            try {
+              let balance = await ledger.account_balance({ account = accountBlob });
+              #ok(nat64ToNat(balance.e8s));
+            } catch (e) {
+              Debug.print("account_balance error: " # e.message());
+              #err("Internal error fetching ICP balance");
+            };
+          };
+        };
+      };
+    };
+  };
+
+  public query ({ caller }) func getCallerStkBalance() : async Nat {
+    switch (userWallets.get(caller)) {
+      case (?wallet) wallet.stkBalance;
+      case null 0;
+    };
+  };
+
+  public query ({ caller }) func getCallerIcpTransactions() : async [TokenTransaction] {
+    switch (userWallets.get(caller)) {
+      case (?wallet) wallet.icpTransactions;
+      case null [];
+    };
+  };
+
+  public query ({ caller }) func getCallerStkTransactions() : async [TokenTransaction] {
+    switch (userWallets.get(caller)) {
+      case (?wallet) wallet.stkTransactions;
+      case null [];
+    };
+  };
+
+  public query ({ caller }) func getCallerAddresses() : async (Text, Text) {
+    switch (userWallets.get(caller)) {
+      case (?wallet) (wallet.icpAccountId, wallet.stkPrincipalId);
+      case null ("", "");
+    };
+  };
+
+  public query ({ caller }) func getCallerAccountIds() : async (Text, Text) {
+    switch (userWallets.get(caller)) {
+      case (?wallet) (wallet.icpAccountId, wallet.stkPrincipalId);
+      case null ("", "");
+    };
+  };
+
+  public query ({ caller }) func getCallerPrincipalId() : async Text {
+    caller.toText();
+  };
+
+  public query ({ caller }) func getCallerWalletSummary() : async (Nat, [TokenTransaction], [TokenTransaction], Text, Text) {
+    switch (userWallets.get(caller)) {
+      case (?wallet) {
+        (wallet.stkBalance, wallet.icpTransactions, wallet.stkTransactions, wallet.icpAccountId, wallet.stkPrincipalId);
+      };
+      case null (0, [], [], "", "");
+    };
+  };
+
+  // ===== RECORD ICP SEND (called by frontend AFTER user's agent has sent ICP on-chain) =====
+  // The actual ICP transfer is performed by the frontend using the user's Internet Identity agent
+  // calling the ICP ledger directly. This function only records the transaction in the wallet.
+  // The canister cannot sign for the user's personal ICP account — only the user can.
+  public shared ({ caller }) func recordIcpSend(recipientAccountId : Text, amount : Nat, blockHeight : Nat) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return #err("Unauthorized: Only users can record ICP sends");
+    };
+    if (amount == 0) {
+      return #err("Amount must be greater than 0");
+    };
+    switch (userWallets.get(caller)) {
+      case null { return #err("Wallet not initialized") };
+      case (?wallet) {
+        let transactionId = nextTransactionId;
+        nextTransactionId += 1;
+        let tx : TokenTransaction = {
+          id = transactionId;
+          from = ?caller;
+          to = null;
+          amount;
+          timestamp = Time.now();
+          transactionType = "Send";
+          pool = null;
+          status = "Completed";
+          reference = ?recipientAccountId;
+          ledgerHeight = ?blockHeight;
+        };
+        tokenTransactions.add(transactionId, tx);
+        userWallets.add(caller, { wallet with icpTransactions = wallet.icpTransactions.concat([tx]) });
+        #ok(());
+      };
+    };
+  };
+
+  // ===== STK TOKENS =====
+
+  public shared ({ caller }) func sendStkTokens(recipient : Text, amount : Nat) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return #err("Unauthorized: Only users can send STK tokens");
+    };
+    switch (userWallets.get(caller)) {
+      case (?wallet) {
+        if (wallet.stkBalance < amount) {
+          return #err("Insufficient STK balance");
+        };
+        let transactionId = nextTransactionId;
+        nextTransactionId += 1;
+        let tx : TokenTransaction = {
+          id = transactionId;
+          from = ?caller;
+          to = null;
+          amount;
+          timestamp = Time.now();
+          transactionType = "Send";
+          pool = null;
+          status = "Completed";
+          reference = ?recipient;
+          ledgerHeight = null;
+        };
+        userWallets.add(caller, {
+          wallet with
+          stkBalance = safeSub(wallet.stkBalance, amount);
+          stkTransactions = wallet.stkTransactions.concat([tx]);
+        });
+        tokenTransactions.add(transactionId, tx);
+        #ok(());
+      };
+      case null { #err("Wallet not found") };
+    };
+  };
+
+  public shared ({ caller }) func receiveStkTokens(amount : Nat) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return #err("Unauthorized: Only users can receive STK tokens");
+    };
+    switch (userWallets.get(caller)) {
+      case (?wallet) {
+        let transactionId = nextTransactionId;
+        nextTransactionId += 1;
+        let tx : TokenTransaction = {
+          id = transactionId;
+          from = null;
+          to = ?caller;
+          amount;
+          timestamp = Time.now();
+          transactionType = "Receive";
+          pool = null;
+          status = "Completed";
+          reference = null;
+          ledgerHeight = null;
+        };
+        userWallets.add(caller, {
+          wallet with
+          stkBalance = wallet.stkBalance + amount;
+          stkTransactions = wallet.stkTransactions.concat([tx]);
+        });
+        tokenTransactions.add(transactionId, tx);
+        #ok(());
+      };
+      case null { #err("Wallet not found") };
+    };
+  };
+
+  // ===== VERIFY ICP PAYMENT (public boundary: Nat) =====
+  public shared func verifyIcpPayment(accountIdText : Text) : async { #ok : Nat; #err : Text } {
+    switch (hexToAccountIdBlob(accountIdText)) {
+      case (#err(_)) { return #err("Invalid account ID format") };
+      case (#ok(accountBlob)) {
+        switch (getLedger()) {
+          case (#err(msg)) { return #err(msg) };
+          case (#ok(ledger)) {
+            try {
+              let bal = await ledger.account_balance({ account = accountBlob });
+              #ok(nat64ToNat(bal.e8s));
+            } catch (e) {
+              Debug.print("verifyIcpPayment error: " # e.message());
+              #err("Internal error verifying ICP payment");
+            };
+          };
+        };
+      };
+    };
+  };
+
+  // ===== MINT STK TOKENS (PROOF-BASED — frontend sends ICP, backend verifies and mints) =====
+  // ARCHITECTURE:
+  // The canister cannot sign for the user's personal ICP account. Only the user can via
+  // their Internet Identity agent. The correct flow is:
+  //   1. Frontend uses user's agent to call ICP ledger directly and transfer ICP to
+  //      the admin treasury account (getAdminTreasuryAddress()).
+  //   2. Frontend passes the resulting block height (icpBlockHeight) to this function.
+  //   3. This function verifies the admin treasury has received at least icpAmount ICP
+  //      by checking its current balance on-chain.
+  //   4. ONLY if balance is sufficient does STK get minted.
+  //
+  // Note: We verify the admin treasury balance (not a specific block) as MVP verification.
+  // Admin MUST configure adminIcpWallet via setAdminIcpWallet/setAdminTreasuryAccount.
+  public shared ({ caller }) func mintStkTokens(icpAmount : Nat, stkAmount : Nat, exchangeRate : Nat, icpBlockHeight : Nat) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return #err("Unauthorized: Only users can mint STK tokens");
+    };
+    if (icpAmount == 0 or stkAmount == 0) {
+      return #err("Amount must be greater than 0");
+    };
+
+    // Step 1: Admin treasury MUST be configured
+    let adminAddr = switch (adminIcpWallet) {
+      case null { return #err("Minting is not available: admin treasury not configured. Contact admin.") };
+      case (?addr) addr;
+    };
+
+    // Step 2: Get ledger
+    let ledger = switch (getLedger()) {
+      case (#err(msg)) { return #err(msg) };
+      case (#ok(l)) l;
+    };
+
+    // Step 3: Convert admin treasury address to Blob
+    let adminTreasuryBlob = switch (hexToAccountIdBlob(adminAddr)) {
+      case (#err(_)) { return #err("Admin treasury address is invalid. Contact admin.") };
+      case (#ok(b)) b;
+    };
+
+    // Step 4: Verify admin treasury balance on-chain (confirms ICP was received)
+    let treasuryBalance : Nat = try {
+      let bal = await ledger.account_balance({ account = adminTreasuryBlob });
+      nat64ToNat(bal.e8s);
+    } catch (e) {
+      Debug.print("mintStkTokens treasury balance check error: " # e.message());
+      return #err("Internal error verifying ICP payment");
+    };
+
+    if (treasuryBalance < icpAmount) {
+      Debug.print("mintStkTokens: treasury balance " # treasuryBalance.toText() # " < required " # icpAmount.toText());
+      return #err("ICP payment not yet confirmed. Please send ICP to the admin treasury address first, then retry.");
+    };
+
+    // Step 5: Wallet must exist to receive STK
+    let wallet = switch (userWallets.get(caller)) {
+      case null { return #err("Wallet not initialized") };
+      case (?w) w;
+    };
+
+    // Step 6: Record ICP payment transaction (with proof block height from frontend)
+    let icpTxId = nextTransactionId;
+    nextTransactionId += 1;
+    let icpTx : TokenTransaction = {
+      id = icpTxId;
+      from = ?caller;
+      to = null;
+      amount = icpAmount;
+      timestamp = Time.now();
+      transactionType = "ICP Payment";
+      pool = null;
+      status = "Completed";
+      reference = ?("STK mint: " # stkAmount.toText());
+      ledgerHeight = ?icpBlockHeight;
+    };
+    tokenTransactions.add(icpTxId, icpTx);
+
+    // Step 7: Record STK mint transaction
+    let stkTxId = nextTransactionId;
+    nextTransactionId += 1;
+    let stkTx : TokenTransaction = {
+      id = stkTxId;
+      from = null;
+      to = ?caller;
+      amount = stkAmount;
+      timestamp = Time.now();
+      transactionType = "Mint";
+      pool = ?("Minting Platform");
+      status = "Completed";
+      reference = ?("ICP block height: " # icpBlockHeight.toText());
+      ledgerHeight = ?icpBlockHeight;
+    };
+    tokenTransactions.add(stkTxId, stkTx);
+
+    // Step 8: Update user wallet — append both transactions, credit STK
+    userWallets.add(caller, {
+      wallet with
+      stkBalance = wallet.stkBalance + stkAmount;
+      icpTransactions = wallet.icpTransactions.concat([icpTx]);
+      stkTransactions = wallet.stkTransactions.concat([stkTx]);
+    });
+
+    // Step 9: Record PaymentTransaction for audit
+    let paymentId = nextPaymentId;
+    nextPaymentId += 1;
+    paymentTransactions.add(paymentId, {
+      id = paymentId;
+      user = caller;
+      icpAmount;
+      stkAmount;
+      exchangeRate;
+      timestamp = Time.now();
+      status = "Completed";
+      reference = ?("ICP block height: " # icpBlockHeight.toText());
+    });
+
+    // Step 10: Update user STK balance map
+    let currBal = switch (userBalances.get(caller)) { case (?b) b; case null 0 };
+    userBalances.add(caller, currBal + stkAmount);
+
+    // Step 11: Decrement minting platform pool
+    switch (tokenPools.get("Minting Platform")) {
+      case (?pool) {
+        tokenPools.add("Minting Platform", { pool with remaining = safeSub(pool.remaining, stkAmount) });
+      };
+      case null {};
+    };
+
+    #ok(());
+  };
+
+  // ===== FILE REGISTRY (inline replacement for blob-storage/registry) =====
+
+  public shared ({ caller }) func registerFileReference(path : Text, hash : Text) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can register file references");
+    };
+    registry.references.add(path, { path; hash });
+  };
+
+  public query func getFileReference(path : Text) : async ?FileReference {
+    registry.references.get(path);
+  };
+
+  public query func listFileReferences() : async [FileReference] {
+    registry.references.values().toArray();
+  };
+
+  public shared ({ caller }) func dropFileReference(path : Text) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can drop file references");
+    };
+    registry.references.remove(path);
+  };
+};
