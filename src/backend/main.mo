@@ -8,6 +8,7 @@ import Blob "mo:core/Blob";
 import Nat64 "mo:core/Nat64";
 import Int "mo:core/Int";
 import Debug "mo:core/Debug";
+import Iter "mo:core/Iter";
 import Nat8 "mo:core/Nat8";
 import Error "mo:core/Error";
 import Runtime "mo:core/Runtime";
@@ -19,7 +20,7 @@ import Sha224 "Sha224";
 
 
 
-actor BowlingScoreTracker {
+persistent actor BowlingScoreTracker {
 
   // ===== INTERNAL TYPES FOR LEDGER (Nat64 ONLY here, never exposed publicly) =====
   type LedgerTokens = { e8s : Nat64 };
@@ -200,31 +201,62 @@ actor BowlingScoreTracker {
   var _stable_joinRequests : [JoinRequest] = [];
   var _stable_invitations : [Invitation] = [];
   var _stable_ledgerPrincipal : ?Principal = ?Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
-  var _stable_adminIcpWallet : ?Text = null;
+  var _stable_adminIcpWallet : ?Text = ?"1bc05ddb3a642296fa5f72a31354d40fc47188c781dd227c52d0c9832f79969e";
+  var _stable_userBalances : [(Principal, Nat)] = [];
+  var _stable_userWallets : [(Principal, Wallet)] = [];
+  var _stable_games : [(Text, Game)] = [];
+  var _stable_tokenTransactions : [(Nat, TokenTransaction)] = [];
+  var _stable_paymentTransactions : [(Nat, PaymentTransaction)] = [];
+  var _stable_userProfiles : [(Principal, UserProfile)] = [];
+  var _stable_teams : [(Nat, Team)] = [];
+  var _stable_tokenPools : [(Text, TokenPool)] = [];
+  var _stable_playerStats : [(Text, Player)] = [];
+  var _stable_usedMintBlockHeights : [(Nat, Bool)] = [];
+  var _stable_burnFee : Nat = 1;
+  var _stable_matchReward : Nat = 2;
+  var _stable_dailyRewardLimit : Nat = 4;
+  var _stable_accessControlAdminAssigned : Bool = false;
+  var _stable_accessControlUserRoles : [(Principal, { #admin; #user; #guest })] = [];
+  var _stable_rewardEarnerCount : Nat = 0;
+  var _stable_rewardsPoolStart : Int = 0;
+  var _stable_gameStartTimes : [(Principal, Int)] = [];
+  var _stable_dailyRewardTracking : [(Principal, { lastEarnTime : Int; earnedToday : Nat })] = [];
+  var _stable_rewardEarners : [(Principal, Bool)] = [];
+  var _stable_claimedRewardGames : [(Nat, Bool)] = [];
 
-  var nextGameId = 0;
-  var nextTeamId = 0;
-  var nextTransactionId = 0;
-  var nextPaymentId = 0;
-  let games = Map.empty<Text, Game>();
-  let playerStats = Map.empty<Text, Player>();
-  var chatMessages : [ChatMessage] = [];
-  let userProfiles = Map.empty<Principal, UserProfile>();
-  let teams = Map.empty<Nat, Team>();
-  var joinRequests : [JoinRequest] = [];
-  var invitations : [Invitation] = [];
-  let tokenPools = Map.empty<Text, TokenPool>();
-  let tokenTransactions = Map.empty<Nat, TokenTransaction>();
-  let paymentTransactions = Map.empty<Nat, PaymentTransaction>();
-  let priceFeeds = Map.empty<Text, PriceFeed>();
-  let userBalances = Map.empty<Principal, Nat>();
-  let userWallets = Map.empty<Principal, Wallet>();
-  var totalSupply = 1000000;
-  var isInitialized = false;
-  var ledgerPrincipal : ?Principal = ?Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
-  var adminIcpWallet : ?Text = null;
+  transient var nextGameId = 0;
+  transient var nextTeamId = 0;
+  transient var nextTransactionId = 0;
+  transient var nextPaymentId = 0;
+  transient let games = Map.empty<Text, Game>();
+  transient let playerStats = Map.empty<Text, Player>();
+  transient var chatMessages : [ChatMessage] = [];
+  transient let userProfiles = Map.empty<Principal, UserProfile>();
+  transient let teams = Map.empty<Nat, Team>();
+  transient var joinRequests : [JoinRequest] = [];
+  transient var invitations : [Invitation] = [];
+  transient let tokenPools = Map.empty<Text, TokenPool>();
+  transient let tokenTransactions = Map.empty<Nat, TokenTransaction>();
+  transient let paymentTransactions = Map.empty<Nat, PaymentTransaction>();
+  transient let priceFeeds = Map.empty<Text, PriceFeed>();
+  transient let userBalances = Map.empty<Principal, Nat>();
+  transient let userWallets = Map.empty<Principal, Wallet>();
+  transient var totalSupply = 1000000;
+  transient var isInitialized = false;
+  transient var burnFee : Nat = 1;
+  transient var matchReward : Nat = 2;
+  transient var dailyRewardLimit : Nat = 4;
+  transient var ledgerPrincipal : ?Principal = ?Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
+  transient var adminIcpWallet : ?Text = ?"1bc05ddb3a642296fa5f72a31354d40fc47188c781dd227c52d0c9832f79969e";
+  transient let usedMintBlockHeights = Map.empty<Nat, Bool>();
+  transient var rewardEarnerCount : Nat = 0;
+  transient var rewardsPoolStart : Int = 0;
+  transient let gameStartTimes = Map.empty<Principal, Int>();
+  transient let dailyRewardTracking = Map.empty<Principal, { lastEarnTime : Int; earnedToday : Nat }>();
+  transient let rewardEarners = Map.empty<Principal, Bool>();
+  transient let claimedRewardGames = Map.empty<Nat, Bool>();
 
-  let accessControlState = AccessControl.initState();
+  transient let accessControlState = AccessControl.initState();
 
   // ===== AUTO-INITIALIZATION HELPERS =====
 
@@ -257,6 +289,27 @@ actor BowlingScoreTracker {
     _stable_invitations := invitations;
     _stable_ledgerPrincipal := ledgerPrincipal;
     _stable_adminIcpWallet := adminIcpWallet;
+    _stable_userWallets := Map.toArray(userWallets);
+    _stable_userBalances := Map.toArray(userBalances);
+    _stable_tokenPools := Map.toArray(tokenPools);
+    _stable_games := Map.toArray(games);
+    _stable_tokenTransactions := Map.toArray(tokenTransactions);
+    _stable_paymentTransactions := Map.toArray(paymentTransactions);
+    _stable_userProfiles := Map.toArray(userProfiles);
+    _stable_teams := Map.toArray(teams);
+    _stable_playerStats := Map.toArray(playerStats);
+    _stable_usedMintBlockHeights := Map.toArray(usedMintBlockHeights);
+    _stable_burnFee := burnFee;
+    _stable_matchReward := matchReward;
+    _stable_dailyRewardLimit := dailyRewardLimit;
+    _stable_accessControlAdminAssigned := accessControlState.adminAssigned;
+    _stable_accessControlUserRoles := Map.toArray(accessControlState.userRoles);
+    _stable_rewardEarnerCount := rewardEarnerCount;
+    _stable_rewardsPoolStart := rewardsPoolStart;
+    _stable_gameStartTimes := Map.toArray(gameStartTimes);
+    _stable_dailyRewardTracking := Map.toArray(dailyRewardTracking);
+    _stable_rewardEarners := Map.toArray(rewardEarners);
+    _stable_claimedRewardGames := Map.toArray(claimedRewardGames);
   };
 
   system func postupgrade() {
@@ -271,11 +324,35 @@ actor BowlingScoreTracker {
     invitations := _stable_invitations;
     ledgerPrincipal := _stable_ledgerPrincipal;
     adminIcpWallet := _stable_adminIcpWallet;
+    for ((k, v) in _stable_userWallets.vals()) { userWallets.add(k, v) };
+    for ((k, v) in _stable_userBalances.vals()) { userBalances.add(k, v) };
+    for ((k, v) in _stable_tokenPools.vals()) { tokenPools.add(k, v) };
+    for ((k, v) in _stable_games.vals()) { games.add(k, v) };
+    for ((k, v) in _stable_tokenTransactions.vals()) { tokenTransactions.add(k, v) };
+    for ((k, v) in _stable_paymentTransactions.vals()) { paymentTransactions.add(k, v) };
+    for ((k, v) in _stable_userProfiles.vals()) { userProfiles.add(k, v) };
+    for ((k, v) in _stable_teams.vals()) { teams.add(k, v) };
+    for ((k, v) in _stable_playerStats.vals()) { playerStats.add(k, v) };
+    for ((k, v) in _stable_usedMintBlockHeights.vals()) { usedMintBlockHeights.add(k, v) };
+    burnFee := _stable_burnFee;
+    matchReward := _stable_matchReward;
+    dailyRewardLimit := _stable_dailyRewardLimit;
+    accessControlState.adminAssigned := _stable_accessControlAdminAssigned;
+    for ((k, v) in _stable_accessControlUserRoles.vals()) { accessControlState.userRoles.add(k, v) };
+    rewardEarnerCount := _stable_rewardEarnerCount;
+    rewardsPoolStart := _stable_rewardsPoolStart;
+    for ((k, v) in _stable_gameStartTimes.vals()) { gameStartTimes.add(k, v) };
+    for ((k, v) in _stable_dailyRewardTracking.vals()) { dailyRewardTracking.add(k, v) };
+    for ((k, v) in _stable_rewardEarners.vals()) { rewardEarners.add(k, v) };
+    for ((k, v) in _stable_claimedRewardGames.vals()) { claimedRewardGames.add(k, v) };
     ensureLedgerPrincipal();
+    if (Map.isEmpty(tokenPools)) {
+      isInitialized := false;
+    };
     ensureTokenPools();
   };
 
-  let registry : RegistryState = {
+  transient let registry : RegistryState = {
     var authorizedPrincipals = [];
     var blobsToRemove = Map.empty<Text, Bool>();
     var references = Map.empty<Text, FileReference>();
@@ -286,7 +363,7 @@ actor BowlingScoreTracker {
   func nat64ToNat(n64 : Nat64) : Nat { n64.toNat() };
 
   // Max Nat64 value: 2^64 - 1 = 18446744073709551615
-  let _nat64Max : Nat = 18446744073709551615;
+  transient let _nat64Max : Nat = 18446744073709551615;
 
   func _natToNat64Safe(n : Nat) : { #ok : Nat64; #err : Text } {
     if (n > _nat64Max) { #err("Value cannot be represented as Nat64") }
@@ -305,7 +382,7 @@ actor BowlingScoreTracker {
   // ===== HEX TO BLOB CONVERSION =====
 
   func hexToAccountIdBlob(hex : Text) : { #ok : Blob; #err : Text } {
-    let chars = hex.toArray();
+    let chars = Text.toIter(hex) |> Iter.toArray(_);
     if (chars.size() != 64) {
       return #err("Invalid hex string length: expected 64 characters");
     };
@@ -452,7 +529,7 @@ actor BowlingScoreTracker {
   };
 
   public query func getAllUserProfiles() : async [UserProfile] {
-    userProfiles.values().toArray();
+    userProfiles.values() |> Iter.toArray(_);
   };
 
   public shared ({ caller }) func updateCallerAchievements(achievements : [Text]) : async () {
@@ -566,7 +643,7 @@ actor BowlingScoreTracker {
   };
 
   public query func getAllGames() : async [Game] {
-    games.values().toArray();
+    games.values() |> Iter.toArray(_);
   };
 
   public query func getPlayerStats(playerName : Text) : async ?Player {
@@ -574,11 +651,11 @@ actor BowlingScoreTracker {
   };
 
   public query func getAllPlayerStats() : async [Player] {
-    playerStats.values().toArray();
+    playerStats.values() |> Iter.toArray(_);
   };
 
   public query func getLeaderboard() : async [Player] {
-    playerStats.values().toArray().sort(
+    playerStats.values() |> Iter.toArray(_).sort(
       func(a : Player, b : Player) : { #less; #equal; #greater } {
         if (a.averageScore > b.averageScore) { #less }
         else if (a.averageScore < b.averageScore) { #greater }
@@ -737,7 +814,7 @@ actor BowlingScoreTracker {
   };
 
   public query func getAllTeams() : async [Team] {
-    teams.values().toArray();
+    teams.values() |> Iter.toArray(_);
   };
 
   public query func getJoinRequests() : async [JoinRequest] {
@@ -761,7 +838,7 @@ actor BowlingScoreTracker {
 
   public func getTokenPools() : async [TokenPool] {
     initializeTokenPools();
-    tokenPools.values().toArray();
+    tokenPools.values() |> Iter.toArray(_);
   };
 
   public func getTokenPool(name : Text) : async ?TokenPool {
@@ -802,7 +879,7 @@ actor BowlingScoreTracker {
   };
 
   public func getTokenTransactions() : async [TokenTransaction] {
-    tokenTransactions.values().toArray();
+    tokenTransactions.values() |> Iter.toArray(_);
   };
 
   public func getTokenTransaction(id : Nat) : async ?TokenTransaction {
@@ -849,14 +926,14 @@ actor BowlingScoreTracker {
   };
 
   public func getPaymentTransactions() : async [PaymentTransaction] {
-    paymentTransactions.values().toArray();
+    paymentTransactions.values() |> Iter.toArray(_);
   };
 
   public func getPaymentTransaction(id : Nat) : async ?PaymentTransaction {
     paymentTransactions.get(id);
   };
 
-  public func creditUserWallet(user : Principal, stkAmount : Nat) : async () {
+  func creditUserWallet(user : Principal, stkAmount : Nat) : async () {
     switch (userWallets.get(user)) {
       case (?wallet) {
         userWallets.add(user, { wallet with stkBalance = wallet.stkBalance + stkAmount });
@@ -872,7 +949,7 @@ actor BowlingScoreTracker {
   };
 
   public func getPriceFeeds() : async [PriceFeed] {
-    priceFeeds.values().toArray();
+    priceFeeds.values() |> Iter.toArray(_);
   };
 
   public func getPriceFeed(source : Text) : async ?PriceFeed {
@@ -881,7 +958,10 @@ actor BowlingScoreTracker {
 
   // ===== USER BALANCES =====
 
-  public func updateUserBalance(user : Principal, amount : Nat) : async () {
+  public shared ({ caller }) func updateUserBalance(user : Principal, amount : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      Runtime.trap("Unauthorized: Only admins can update user balances");
+    };
     userBalances.add(user, amount);
   };
 
@@ -896,7 +976,10 @@ actor BowlingScoreTracker {
     totalSupply;
   };
 
-  public func updateTotalSupply(amount : Nat) : async () {
+  public shared ({ caller }) func updateTotalSupply(amount : Nat) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      Runtime.trap("Unauthorized: Only admins can update total supply");
+    };
     totalSupply := amount;
   };
 
@@ -970,6 +1053,68 @@ actor BowlingScoreTracker {
     };
   };
 
+  public shared ({ caller }) func transferFromPoolToUser(poolName : Text, recipient : Text, amount : Nat) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can perform this action");
+    };
+    let recipientPrincipal : Principal = try {
+      Principal.fromText(recipient)
+    } catch (_) {
+      return #err("Invalid recipient principal ID");
+    };
+    initializeTokenPools();
+    switch (tokenPools.get(poolName)) {
+      case (?pool) {
+        if (pool.remaining < amount) {
+          return #err("Insufficient balance in pool");
+        };
+        let recipientWallet = switch (userWallets.get(recipientPrincipal)) {
+          case (?w) w;
+          case null { return #err("Recipient does not have a wallet") };
+        };
+        tokenPools.add(poolName, { pool with remaining = safeSub(pool.remaining, amount) });
+
+        let poolTxId = nextTransactionId;
+        nextTransactionId += 1;
+        let poolTx : TokenTransaction = {
+          id = poolTxId;
+          from = null;
+          to = ?recipientPrincipal;
+          amount;
+          timestamp = Time.now();
+          transactionType = "Pool to User";
+          pool = ?poolName;
+          status = "Completed";
+          reference = ?("Transferred to " # recipient);
+          ledgerHeight = null;
+        };
+        let userTxId = nextTransactionId;
+        nextTransactionId += 1;
+        let userTx : TokenTransaction = {
+          id = userTxId;
+          from = null;
+          to = ?recipientPrincipal;
+          amount;
+          timestamp = Time.now();
+          transactionType = "Receive";
+          pool = ?poolName;
+          status = "Completed";
+          reference = ?("Received from pool " # poolName);
+          ledgerHeight = null;
+        };
+        userWallets.add(recipientPrincipal, {
+          recipientWallet with
+          stkBalance = recipientWallet.stkBalance + amount;
+          stkTransactions = recipientWallet.stkTransactions.concat([userTx]);
+        });
+        tokenTransactions.add(poolTxId, poolTx);
+        tokenTransactions.add(userTxId, userTx);
+        #ok(());
+      };
+      case null { #err("Pool not found") };
+    };
+  };
+
   public shared ({ caller }) func adjustPoolAllocation(poolName : Text, newTotal : Nat) : async { #ok : (); #err : Text } {
     if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
       return #err("Unauthorized: Only admins can perform this action");
@@ -1009,7 +1154,7 @@ actor BowlingScoreTracker {
     if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
       return #err("Unauthorized: Only admins can perform this action");
     };
-    let txs = tokenTransactions.values().toArray();
+    let txs = tokenTransactions.values() |> Iter.toArray(_);
     #ok(txs.sort(func(a : TokenTransaction, b : TokenTransaction) : { #less; #equal; #greater } {
       if (a.timestamp > b.timestamp) { #less }
       else if (a.timestamp < b.timestamp) { #greater }
@@ -1021,7 +1166,7 @@ actor BowlingScoreTracker {
     if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
       return #err("Unauthorized: Only admins can perform this action");
     };
-    let filtered = tokenTransactions.values().toArray().filter(func(tx : TokenTransaction) : Bool {
+    let filtered = tokenTransactions.values() |> Iter.toArray(_).filter(func(tx : TokenTransaction) : Bool {
       tx.transactionType == "Pool Transfer" or tx.transactionType == "Pool Adjustment"
     });
     #ok(filtered.sort(func(a : TokenTransaction, b : TokenTransaction) : { #less; #equal; #greater } {
@@ -1036,7 +1181,7 @@ actor BowlingScoreTracker {
       return #err("Unauthorized: Only admins can perform this action");
     };
     initializeTokenPools();
-    #ok(tokenPools.values().toArray());
+    #ok(tokenPools.values() |> Iter.toArray(_));
   };
 
   public query ({ caller }) func getTotalSupplyStatus() : async { #ok : Nat; #err : Text } {
@@ -1262,17 +1407,30 @@ actor BowlingScoreTracker {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       return #err("Unauthorized: Only users can send STK tokens");
     };
+    let recipientPrincipal : Principal = try {
+      Principal.fromText(recipient)
+    } catch (_) {
+      return #err("Invalid recipient principal ID");
+    };
+    if (caller == recipientPrincipal) {
+      return #err("Cannot send STK tokens to yourself");
+    };
+    let recipientWallet = switch (userWallets.get(recipientPrincipal)) {
+      case (?w) w;
+      case null { return #err("Recipient does not have a wallet") };
+    };
     switch (userWallets.get(caller)) {
-      case (?wallet) {
-        if (wallet.stkBalance < amount) {
-          return #err("Insufficient STK balance");
+      case (?senderWallet) {
+        let totalDeduction = amount + burnFee;
+        if (senderWallet.stkBalance < totalDeduction) {
+          return #err("Insufficient STK balance to cover amount plus burn fee of " # Nat.toText(burnFee));
         };
-        let transactionId = nextTransactionId;
+        let sendTxId = nextTransactionId;
         nextTransactionId += 1;
-        let tx : TokenTransaction = {
-          id = transactionId;
+        let sendTx : TokenTransaction = {
+          id = sendTxId;
           from = ?caller;
-          to = null;
+          to = ?recipientPrincipal;
           amount;
           timestamp = Time.now();
           transactionType = "Send";
@@ -1281,21 +1439,96 @@ actor BowlingScoreTracker {
           reference = ?recipient;
           ledgerHeight = null;
         };
+        let recvTxId = nextTransactionId;
+        nextTransactionId += 1;
+        let recvTx : TokenTransaction = {
+          id = recvTxId;
+          from = ?caller;
+          to = ?recipientPrincipal;
+          amount;
+          timestamp = Time.now();
+          transactionType = "Receive";
+          pool = null;
+          status = "Completed";
+          reference = ?recipient;
+          ledgerHeight = null;
+        };
+        let burnTxId = nextTransactionId;
+        nextTransactionId += 1;
+        let burnTx : TokenTransaction = {
+          id = burnTxId;
+          from = ?caller;
+          to = null;
+          amount = burnFee;
+          timestamp = Time.now();
+          transactionType = "Burn";
+          pool = null;
+          status = "Completed";
+          reference = ?("Fee burn on send to " # recipient);
+          ledgerHeight = null;
+        };
         userWallets.add(caller, {
-          wallet with
-          stkBalance = safeSub(wallet.stkBalance, amount);
-          stkTransactions = wallet.stkTransactions.concat([tx]);
+          senderWallet with
+          stkBalance = safeSub(senderWallet.stkBalance, totalDeduction);
+          stkTransactions = senderWallet.stkTransactions.concat([sendTx, burnTx]);
         });
-        tokenTransactions.add(transactionId, tx);
+        userWallets.add(recipientPrincipal, {
+          recipientWallet with
+          stkBalance = recipientWallet.stkBalance + amount;
+          stkTransactions = recipientWallet.stkTransactions.concat([recvTx]);
+        });
+        totalSupply := safeSub(totalSupply, burnFee);
+        tokenTransactions.add(sendTxId, sendTx);
+        tokenTransactions.add(recvTxId, recvTx);
+        tokenTransactions.add(burnTxId, burnTx);
         #ok(());
       };
       case null { #err("Wallet not found") };
     };
   };
 
+  public shared ({ caller }) func setBurnFee(newFee : Nat) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can set the burn fee");
+    };
+    burnFee := newFee;
+    _stable_burnFee := newFee;
+    #ok(());
+  };
+
+  public query func getBurnFee() : async Nat {
+    burnFee
+  };
+
+  public shared ({ caller }) func setMatchReward(newReward : Nat) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can set the match reward");
+    };
+    matchReward := newReward;
+    _stable_matchReward := newReward;
+    #ok(());
+  };
+
+  public query func getMatchReward() : async Nat {
+    matchReward
+  };
+
+  public shared ({ caller }) func setDailyRewardLimit(newLimit : Nat) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can set the daily reward limit");
+    };
+    dailyRewardLimit := newLimit;
+    _stable_dailyRewardLimit := newLimit;
+    #ok(());
+  };
+
+  public query func getDailyRewardLimit() : async Nat {
+    dailyRewardLimit
+  };
+
   public shared ({ caller }) func receiveStkTokens(amount : Nat) : async { #ok : (); #err : Text } {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      return #err("Unauthorized: Only users can receive STK tokens");
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can credit STK tokens");
     };
     switch (userWallets.get(caller)) {
       case (?wallet) {
@@ -1367,6 +1600,13 @@ actor BowlingScoreTracker {
       return #err("Amount must be greater than 0");
     };
 
+    // Prevent double-minting: reserve block height before any await so that
+    // concurrent calls cannot both pass this check during an await window.
+    if (usedMintBlockHeights.get(icpBlockHeight) != null) {
+      return #err("This ICP block height has already been used for minting");
+    };
+    usedMintBlockHeights.add(icpBlockHeight, true);
+
     // Step 1: Admin treasury MUST be configured
     let adminAddr = switch (adminIcpWallet) {
       case null { return #err("Minting is not available: admin treasury not configured. Contact admin.") };
@@ -1396,6 +1636,8 @@ actor BowlingScoreTracker {
 
     if (treasuryBalance < icpAmount) {
       Debug.print("mintStkTokens: treasury balance " # treasuryBalance.toText() # " < required " # icpAmount.toText());
+      // Unmark so the user can retry once ICP has propagated
+      usedMintBlockHeights.remove(icpBlockHeight);
       return #err("ICP payment not yet confirmed. Please send ICP to the admin treasury address first, then retry.");
     };
 
@@ -1490,7 +1732,7 @@ actor BowlingScoreTracker {
   };
 
   public query func listFileReferences() : async [FileReference] {
-    registry.references.values().toArray();
+    registry.references.values() |> Iter.toArray(_);
   };
 
   public shared ({ caller }) func dropFileReference(path : Text) : async () {
@@ -1498,5 +1740,174 @@ actor BowlingScoreTracker {
       Runtime.trap("Unauthorized: Only users can drop file references");
     };
     registry.references.remove(path);
+  };
+
+  // ===== PLAY TO EARN =====
+
+  // Records the start of a game session using a canister-trusted timestamp.
+  // Must be called before saveGame(). The frontend cannot spoof this value.
+  public shared ({ caller }) func startGame() : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return #err("Unauthorized: Only users can start games");
+    };
+    gameStartTimes.add(caller, Time.now());
+    #ok(());
+  };
+
+  // Returns the configured per-game STK reward, or 0 if the pool is empty.
+  func computeRewardPerGame() : Nat {
+    let poolRemaining = switch (tokenPools.get("In-Game Rewards")) {
+      case (?p) p.remaining;
+      case null { return 0 };
+    };
+    if (poolRemaining == 0) { return 0 };
+    matchReward
+  };
+
+  // Claims the play-to-earn reward for a completed game.
+  // Enforces:
+  //   - Caller called startGame() before saveGame()
+  //   - At least 20 minutes elapsed between startGame() and game.timestamp
+  //   - Max 2 reward-earning games per rolling 24-hour window
+  //   - Each game ID can only be claimed once
+  public shared ({ caller }) func claimGameReward(gameId : Nat) : async { #ok : Nat; #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      return #err("Unauthorized: Only users can claim game rewards");
+    };
+
+    let wallet = switch (userWallets.get(caller)) {
+      case null { return #err("Wallet not initialized") };
+      case (?w) w;
+    };
+
+    let game = switch (games.get(gameId.toText())) {
+      case null { return #err("Game not found") };
+      case (?g) g;
+    };
+    switch (game.owner) {
+      case (?owner) {
+        if (owner != caller) { return #err("You are not the owner of this game") };
+      };
+      case null { return #err("This game has no owner") };
+    };
+
+    if (claimedRewardGames.get(gameId) != null) {
+      return #err("Reward already claimed for this game");
+    };
+
+    // Verify 20-minute minimum using canister-trusted timestamps
+    let minDurationNs : Int = 20 * 60 * 1_000_000_000;
+    let startTime = switch (gameStartTimes.get(caller)) {
+      case null { return #err("No active game session. Call startGame() before playing.") };
+      case (?t) t;
+    };
+    if (game.timestamp - startTime < minDurationNs) {
+      return #err("Game must be at least 20 minutes long to earn rewards");
+    };
+
+    // Rolling 24-hour daily cap derived from dailyRewardLimit / matchReward
+    let dayNs : Int = 24 * 60 * 60 * 1_000_000_000;
+    let now = Time.now();
+    let tracking = switch (dailyRewardTracking.get(caller)) {
+      case (?t) t;
+      case null { { lastEarnTime = 0; earnedToday = 0 } };
+    };
+    let gamesEarnedToday : Nat = if (now - tracking.lastEarnTime >= dayNs) 0
+                                  else tracking.earnedToday;
+    let rewardPerGame = Nat.max(1, matchReward);
+    let maxGamesPerDay = Nat.max(1, dailyRewardLimit / rewardPerGame);
+    if (gamesEarnedToday >= maxGamesPerDay) {
+      return #err("Daily reward limit reached. You can earn up to " # Nat.toText(dailyRewardLimit) # " STK (" # Nat.toText(maxGamesPerDay) # " games) per 24-hour period.");
+    };
+
+    let reward = computeRewardPerGame();
+    if (reward == 0) {
+      return #err("In-Game Rewards pool is empty");
+    };
+
+    // Record pool start time on the first ever reward distribution
+    if (rewardsPoolStart <= 0) {
+      rewardsPoolStart := now;
+    };
+
+    // Mark game as claimed and clear caller's session start (before any state mutation)
+    claimedRewardGames.add(gameId, true);
+    gameStartTimes.remove(caller);
+
+    // Build reward transaction
+    let txId = nextTransactionId;
+    nextTransactionId += 1;
+    let tx : TokenTransaction = {
+      id = txId;
+      from = null;
+      to = ?caller;
+      amount = reward;
+      timestamp = now;
+      transactionType = "Play-to-Earn";
+      pool = ?"In-Game Rewards";
+      status = "Completed";
+      reference = ?("Game #" # gameId.toText());
+      ledgerHeight = null;
+    };
+    tokenTransactions.add(txId, tx);
+
+    // Credit STK to wallet and balance map
+    userWallets.add(caller, {
+      wallet with
+      stkBalance = wallet.stkBalance + reward;
+      stkTransactions = wallet.stkTransactions.concat([tx]);
+    });
+    let currBal = switch (userBalances.get(caller)) { case (?b) b; case null 0 };
+    userBalances.add(caller, currBal + reward);
+
+    // Update rolling daily tracking
+    dailyRewardTracking.add(caller, { lastEarnTime = now; earnedToday = gamesEarnedToday + 1 });
+
+    // Track unique earners for the scaling formula (only increments, never decrements)
+    if (rewardEarners.get(caller) == null) {
+      rewardEarners.add(caller, true);
+      rewardEarnerCount += 1;
+    };
+
+    // Decrement the In-Game Rewards pool
+    switch (tokenPools.get("In-Game Rewards")) {
+      case (?pool) {
+        tokenPools.add("In-Game Rewards", { pool with remaining = safeSub(pool.remaining, reward) });
+      };
+      case null {};
+    };
+
+    #ok(reward)
+  };
+
+  // Returns the current dynamically computed per-game reward for UI display.
+  public query func getCurrentRewardPerGame() : async Nat {
+    computeRewardPerGame()
+  };
+
+  // Returns the caller's current reward status for the UI.
+  public query ({ caller }) func getCallerRewardStatus() : async {
+    gamesEarnedToday : Nat;
+    dailyCap : Nat;
+    rewardPerGame : Nat;
+    canClaim : Bool;
+  } {
+    let dayNs : Int = 24 * 60 * 60 * 1_000_000_000;
+    let now = Time.now();
+    let tracking = switch (dailyRewardTracking.get(caller)) {
+      case (?t) t;
+      case null { { lastEarnTime = 0; earnedToday = 0 } };
+    };
+    let gamesEarnedToday = if (now - tracking.lastEarnTime >= dayNs) 0
+                           else tracking.earnedToday;
+    let reward = computeRewardPerGame();
+    let rewardPerGameVal = Nat.max(1, matchReward);
+    let maxGamesPerDayVal = Nat.max(1, dailyRewardLimit / rewardPerGameVal);
+    {
+      gamesEarnedToday;
+      dailyCap = maxGamesPerDayVal;
+      rewardPerGame = reward;
+      canClaim = gamesEarnedToday < maxGamesPerDayVal and reward > 0;
+    }
   };
 };

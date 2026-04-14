@@ -49,7 +49,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
         <div className="text-center mb-8">
           <div className="relative w-full max-w-lg mx-auto mb-6 overflow-hidden rounded-xl shadow-2xl">
             <img
-              src="/assets/Bowling_Pins_Being_Hit_by_a_Bowling_Ball_-_PINSTACK_Plano_(2015-04-10_19.34.19_by_Nan_Palmero).jpg"
+              src="/assets/bowling-hero.jpg"
               alt="Bowling pins being hit by a bowling ball"
               className="w-full h-48 sm:h-56 md:h-64 object-cover bowling-pins-hero"
               loading="eager"

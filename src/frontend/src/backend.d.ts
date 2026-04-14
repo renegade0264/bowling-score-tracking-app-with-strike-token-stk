@@ -332,6 +332,13 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    transferFromPoolToUser(poolName: string, recipient: string, amount: bigint): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     transferTokensBetweenPools(sourcePool: string, destinationPool: string, amount: bigint): Promise<{
         __kind__: "ok";
         ok: null;

@@ -997,6 +997,37 @@ export function useDistributeTokens() {
   });
 }
 
+export function useTransferFromPoolToUser() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      poolName,
+      recipient,
+      amount,
+    }: {
+      poolName: string;
+      recipient: string;
+      amount: bigint;
+    }) => {
+      if (!actor) throw new Error("Actor not available");
+      const result = await actor.transferFromPoolToUser(poolName, recipient, amount);
+
+      if ("ok" in result) {
+        return result.ok;
+      }
+      throw new Error(result.err);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tokenAllocations"] });
+      queryClient.invalidateQueries({ queryKey: ["tokenTransactions"] });
+      queryClient.invalidateQueries({ queryKey: ["poolManagementHistory"] });
+      queryClient.invalidateQueries({ queryKey: ["detailedAuditTrail"] });
+    },
+  });
+}
+
 export function useTransferTokensBetweenPools() {
   const { actor } = useActor();
   const queryClient = useQueryClient();

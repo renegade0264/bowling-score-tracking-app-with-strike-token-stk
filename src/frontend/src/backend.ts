@@ -432,6 +432,13 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
+    transferFromPoolToUser(poolName: string, recipient: string, amount: bigint): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     transferTokensBetweenPools(sourcePool: string, destinationPool: string, amount: bigint): Promise<{
         __kind__: "ok";
         ok: null;
@@ -1792,6 +1799,26 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.setLedgerPrincipal(arg0);
+            return from_candid_variant_n10(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async transferFromPoolToUser(arg0: string, arg1: string, arg2: bigint): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.transferFromPoolToUser(arg0, arg1, arg2);
+                return from_candid_variant_n10(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.transferFromPoolToUser(arg0, arg1, arg2);
             return from_candid_variant_n10(this._uploadFile, this._downloadFile, result);
         }
     }

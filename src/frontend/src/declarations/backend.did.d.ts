@@ -335,6 +335,11 @@ export interface _SERVICE {
     { 'ok' : null } |
       { 'err' : string }
   >,
+  'transferFromPoolToUser' : ActorMethod<
+    [string, string, bigint],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
   'transferTokensBetweenPools' : ActorMethod<
     [string, string, bigint],
     { 'ok' : null } |

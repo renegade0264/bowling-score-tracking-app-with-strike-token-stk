@@ -53,6 +53,7 @@ import {
   useIsCallerAdmin,
   useSetAdminIcpWallet,
   useSetLedgerPrincipal,
+  useTransferFromPoolToUser,
   useTransferTokensBetweenPools,
 } from "@/hooks/useQueries";
 import type { TokenPool } from "@/types";
@@ -143,6 +144,8 @@ export function AdminPage({ onNavigate }: AdminPageProps) {
     useDistributeTokens();
   const { mutate: transferBetweenPools, isPending: isTransferring } =
     useTransferTokensBetweenPools();
+  const { mutate: transferFromPool, isPending: isTransferringToUser } =
+    useTransferFromPoolToUser();
   const { mutate: adjustPoolAllocation, isPending: isAdjusting } =
     useAdjustPoolAllocation();
 
@@ -167,6 +170,12 @@ export function AdminPage({ onNavigate }: AdminPageProps) {
   const [transferDestPool, setTransferDestPool] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
   const [showTransferDialog, setShowTransferDialog] = useState(false);
+
+  // Pool-to-user transfer state
+  const [poolToUserPool, setPoolToUserPool] = useState("");
+  const [poolToUserRecipient, setPoolToUserRecipient] = useState("");
+  const [poolToUserAmount, setPoolToUserAmount] = useState("");
+  const [showPoolToUserDialog, setShowPoolToUserDialog] = useState(false);
 
   // Pool adjustment state
   const [adjustPoolName, setAdjustPoolName] = useState("");
@@ -278,6 +287,39 @@ export function AdminPage({ onNavigate }: AdminPageProps) {
           setTransferDestPool("");
           setTransferAmount("");
           setShowTransferDialog(false);
+          refetchAllocations();
+          refetchPoolHistory();
+          refetchAudit();
+        },
+        onError: (error) => {
+          toast.error(`Failed to transfer tokens: ${error.message}`);
+        },
+      },
+    );
+  };
+
+  const handleTransferFromPoolToUser = () => {
+    if (!poolToUserPool || !poolToUserRecipient || !poolToUserAmount) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    const amount = BigInt(Number.parseInt(poolToUserAmount));
+    transferFromPool(
+      {
+        poolName: poolToUserPool,
+        recipient: poolToUserRecipient,
+        amount,
+      },
+      {
+        onSuccess: () => {
+          toast.success(
+            `Successfully transferred ${poolToUserAmount} STK from ${poolToUserPool} to ${poolToUserRecipient}`,
+          );
+          setPoolToUserPool("");
+          setPoolToUserRecipient("");
+          setPoolToUserAmount("");
+          setShowPoolToUserDialog(false);
           refetchAllocations();
           refetchPoolHistory();
           refetchAudit();
@@ -1632,6 +1674,29 @@ export function AdminPage({ onNavigate }: AdminPageProps) {
                                   </Select>
                                 </div>
                                 <div className="space-y-2">
+                                  <Label>Destination Pool</Label>
+                                  <Select
+                                    value={transferDestPool}
+                                    onValueChange={setTransferDestPool}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select destination pool..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {safeTokenPools
+                                        .filter((p) => p.name !== transferSourcePool)
+                                        .map((pool) => (
+                                          <SelectItem
+                                            key={pool.name}
+                                            value={pool.name}
+                                          >
+                                            {pool.name}
+                                          </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-2">
                                   <Label>Amount (STK)</Label>
                                   <Input
                                     type="number"
@@ -1787,6 +1852,116 @@ export function AdminPage({ onNavigate }: AdminPageProps) {
                         </CardContent>
                       </Card>
                     </div>
+
+                    {/* Transfer Pool to User Wallet */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <ArrowRightLeft className="w-4 h-4" />
+                          Transfer Pool STK to User Wallet
+                        </CardTitle>
+                        <CardDescription>
+                          Send STK tokens from a pool directly to a user's wallet balance
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <Dialog
+                          open={showPoolToUserDialog}
+                          onOpenChange={setShowPoolToUserDialog}
+                        >
+                          <DialogTrigger asChild>
+                            <Button className="w-full" variant="outline">
+                              <ArrowRightLeft className="w-4 h-4 mr-2" />
+                              Transfer to User Wallet
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>
+                                Transfer STK from Pool to User
+                              </DialogTitle>
+                              <DialogDescription>
+                                Deduct STK from a pool and credit it to a user's
+                                wallet. The recipient must have a registered wallet.
+                                This action is logged in the audit trail.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                              <div className="space-y-2">
+                                <Label>Source Pool</Label>
+                                <Select
+                                  value={poolToUserPool}
+                                  onValueChange={setPoolToUserPool}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select pool..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {safeTokenPools.map((pool) => (
+                                      <SelectItem
+                                        key={pool.name}
+                                        value={pool.name}
+                                      >
+                                        {pool.name} (
+                                        {Number(pool.remaining).toLocaleString()}{" "}
+                                        STK remaining)
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Recipient Principal ID</Label>
+                                <Input
+                                  placeholder="aaaaa-aa..."
+                                  value={poolToUserRecipient}
+                                  onChange={(e) =>
+                                    setPoolToUserRecipient(e.target.value)
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Amount (STK)</Label>
+                                <Input
+                                  type="number"
+                                  placeholder="0"
+                                  value={poolToUserAmount}
+                                  onChange={(e) =>
+                                    setPoolToUserAmount(e.target.value)
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <DialogFooter>
+                              <Button
+                                variant="outline"
+                                onClick={() => setShowPoolToUserDialog(false)}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                onClick={handleTransferFromPoolToUser}
+                                disabled={
+                                  isTransferringToUser ||
+                                  !poolToUserPool ||
+                                  !poolToUserRecipient ||
+                                  !poolToUserAmount
+                                }
+                              >
+                                {isTransferringToUser ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                                    Transferring...
+                                  </>
+                                ) : (
+                                  "Transfer to Wallet"
+                                )}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </CardContent>
+                    </Card>
 
                     {/* Pool Management History */}
                     <Card>

@@ -52,7 +52,6 @@ import {
   Zap,
 } from "lucide-react";
 import { useState } from "react";
-import { useFileUpload, useFileUrl } from "../blob-storage/FileStorage";
 
 type Page =
   | "home"
@@ -86,10 +85,10 @@ export function ProfilePage({ onNavigate }: ProfilePageProps) {
     useGetUserTeams(principal);
   const { data: tokenBalance = BigInt(0) } = useGetTokenBalance();
 
-  const { uploadFile, isUploading } = useFileUpload();
+  const [isUploading, setIsUploading] = useState(false);
   const { mutate: updateProfilePicture } = useUpdateProfilePicture();
   const { mutate: saveProfile } = useSaveCallerUserProfile();
-  const { data: profilePictureUrl } = useFileUrl(profile?.profilePicture || "");
+  const profilePictureUrl = profile?.profilePicture || null;
 
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isNameEditDialogOpen, setIsNameEditDialogOpen] = useState(false);
@@ -274,22 +273,60 @@ export function ProfilePage({ onNavigate }: ProfilePageProps) {
   const handleUploadProfilePicture = async () => {
     if (!selectedFile || !principal) return;
 
+    setIsUploading(true);
     try {
-      const fileExtension = selectedFile.name.split(".").pop() || "jpg";
-      const fileName = `profile-pictures/${principal.toString()}-${Date.now()}.${fileExtension}`;
-      const { path } = await uploadFile(fileName, selectedFile);
-
-      // FIXED: Removed principal parameter - backend uses caller-based authorization
-      updateProfilePicture({ picturePath: path });
-
-      setIsUploadDialogOpen(false);
-      setSelectedFile(null);
-      setPreviewUrl(null);
+      // Resize and compress the image client-side, then store as a data URL
+      // directly in the canister — no external storage service required.
+      const dataUrl = await resizeImageToDataUrl(selectedFile, 256, 256, 0.75);
+      updateProfilePicture(
+        { picturePath: dataUrl },
+        {
+          onSuccess: () => {
+            setIsUploadDialogOpen(false);
+            setSelectedFile(null);
+            setPreviewUrl(null);
+          },
+          onError: (error) => {
+            console.error("Failed to save profile picture:", error);
+            alert("Failed to upload profile picture. Please try again.");
+          },
+        },
+      );
     } catch (error) {
-      console.error("Failed to upload profile picture:", error);
+      console.error("Failed to process profile picture:", error);
       alert("Failed to upload profile picture. Please try again.");
+    } finally {
+      setIsUploading(false);
     }
   };
+
+  function resizeImageToDataUrl(
+    file: File,
+    maxWidth: number,
+    maxHeight: number,
+    quality: number,
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("Canvas context unavailable"));
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Failed to load image"));
+      };
+      img.src = objectUrl;
+    });
+  }
 
   const handleUpdateName = () => {
     if (!profile || !editName.trim()) return;

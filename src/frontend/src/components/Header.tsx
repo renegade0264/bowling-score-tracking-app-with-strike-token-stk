@@ -31,7 +31,6 @@ import {
   Wallet,
   Zap,
 } from "lucide-react";
-import { useFileUrl } from "../blob-storage/FileStorage";
 
 type Page =
   | "home"
@@ -62,7 +61,7 @@ export function Header({
   const { clear, identity } = useInternetIdentity();
   const queryClient = useQueryClient();
   const { data: profile } = useGetCallerUserProfile();
-  const { data: profilePictureUrl } = useFileUrl(profile?.profilePicture || "");
+  const profilePictureUrl = profile?.profilePicture || null;
   const { data: tokenBalance } = useGetTokenBalance();
   const { data: isAdmin } = useIsCallerAdmin();
 

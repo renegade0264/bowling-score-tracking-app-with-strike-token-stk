@@ -187,7 +187,7 @@ export function WalletPage({ onNavigate }: WalletPageProps) {
       return;
     }
     const amount = BigInt(
-      Math.floor(Number.parseFloat(sendStkAmount) * 100000000),
+      Math.floor(Number.parseFloat(sendStkAmount)),
     );
     if (amount <= BigInt(0)) {
       toast.error("Please enter a valid amount");
@@ -223,7 +223,7 @@ export function WalletPage({ onNavigate }: WalletPageProps) {
   };
 
   const icpBalanceICP = Number(icpBalance ?? BigInt(0)) / 100000000;
-  const stkBalance = Number(wallet?.stkBalance ?? BigInt(0)) / 100000000;
+  const stkBalance = Number(wallet?.stkBalance ?? BigInt(0));
   const currentTransactions =
     activeTab === "icp"
       ? (wallet?.icpTransactions ?? [])
@@ -704,7 +704,7 @@ export function WalletPage({ onNavigate }: WalletPageProps) {
                         STK Balance
                       </p>
                       <p className="text-4xl font-bold text-primary">
-                        {stkBalance.toFixed(8)} STK
+                        {stkBalance.toLocaleString()} STK
                       </p>
                       <p className="text-sm text-muted-foreground mt-1">
                         Strike Tokens • Internal token system
@@ -764,7 +764,7 @@ export function WalletPage({ onNavigate }: WalletPageProps) {
                                 }
                               />
                               <p className="text-xs text-muted-foreground">
-                                Available: {stkBalance.toFixed(8)} STK
+                                Available: {stkBalance.toLocaleString()} STK
                               </p>
                             </div>
                           </div>
@@ -945,7 +945,10 @@ export function WalletPage({ onNavigate }: WalletPageProps) {
                           }`}
                         >
                           {tx.transactionType === "Send" ? "-" : "+"}
-                          {formatBalance(tx.amount)} {activeTab.toUpperCase()}
+                          {activeTab === "icp"
+                            ? formatBalance(tx.amount)
+                            : Number(tx.amount).toLocaleString()}{" "}
+                          {activeTab.toUpperCase()}
                         </p>
                       </div>
                     </div>

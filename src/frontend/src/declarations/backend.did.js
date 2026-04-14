@@ -389,6 +389,11 @@ export const idlService = IDL.Service({
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
       [],
     ),
+  'transferFromPoolToUser' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Nat],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
   'transferTokensBetweenPools' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Nat],
       [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
@@ -807,6 +812,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'setLedgerPrincipal' : IDL.Func(
         [IDL.Principal],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'transferFromPoolToUser' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat],
         [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),

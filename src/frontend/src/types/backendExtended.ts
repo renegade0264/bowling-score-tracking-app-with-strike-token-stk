@@ -79,6 +79,11 @@ export interface backendInterface {
   getUserBalance(principal: Principal): Promise<bigint>;
   getTokenTransactions(): Promise<TokenTransaction[]>;
   getTokenPools(): Promise<TokenPool[]>;
+  transferFromPoolToUser(
+    poolName: string,
+    recipient: string,
+    amount: bigint,
+  ): Promise<{ ok: null } | { err: string }>;
   transferTokensBetweenPools(
     sourcePool: string,
     destinationPool: string,

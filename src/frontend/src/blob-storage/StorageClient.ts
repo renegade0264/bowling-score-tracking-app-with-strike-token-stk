@@ -491,7 +491,7 @@ export class StorageClient {
   private async getCertificate(hash: string): Promise<Uint8Array> {
     const args = IDL.encode([IDL.Text], [hash]);
     const result = await this.agent.call(this.backendCanisterId, {
-      methodName: "_caffeineStorageCreateCertificate",
+      methodName: "_immutableObjectStorageCreateCertificate",
       arg: args,
     });
     const respone = result.response.body;
