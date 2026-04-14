@@ -93,15 +93,7 @@ export function GameChat({ gameId, currentPlayer }: GameChatProps) {
     if (!message.trim()) return;
 
     try {
-      // Use the authenticated user's display name if available, otherwise use currentPlayer
-      const senderName =
-        identity && userProfile
-          ? userProfile.displayName ||
-            `User ${identity.getPrincipal().toString().slice(0, 8)}...`
-          : currentPlayer;
-
       await sendMessageMutation.mutateAsync({
-        sender: senderName,
         message: message.trim(),
         gameId,
       });

@@ -350,13 +350,6 @@ export interface backendInterface {
     updateCallerAchievements(achievements: Array<string>): Promise<void>;
     updateCallerProfilePicture(picturePath: string): Promise<void>;
     updateCallerUserProfileStats(totalSpares: bigint, totalStrikes: bigint, totalPoints: bigint, highestScore: bigint, gamesPlayed: bigint): Promise<void>;
-    updateCallerWallet(stkBalance: bigint): Promise<{
-        __kind__: "ok";
-        ok: null;
-    } | {
-        __kind__: "err";
-        err: string;
-    }>;
     updatePlayerStats(name: string, totalSpares: bigint, totalStrikes: bigint, totalPoints: bigint, highestScore: bigint, gamesPlayed: bigint): Promise<void>;
     updatePriceFeed(source: string, icpUsd: bigint, status: string): Promise<void>;
     updateTeamStats(teamId: bigint, averageScore: bigint, totalGames: bigint, bestScore: bigint): Promise<void>;

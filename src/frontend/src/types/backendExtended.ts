@@ -23,22 +23,21 @@ import type {
  */
 export interface backendInterface {
   // Games
-  getAllGames(): Promise<Game[]>;
+  getAllGames(offset: bigint, limit: bigint): Promise<Game[]>;
   getGame(gameId: bigint): Promise<Game | null>;
   saveGame(
     players: Player[],
     frames: Frame[][],
     totalScores: bigint[],
-    owner: Principal | null,
   ): Promise<bigint>;
   // Player stats
-  getAllPlayerStats(): Promise<Player[]>;
+  getAllPlayerStats(offset: bigint, limit: bigint): Promise<Player[]>;
   getPlayerStats(playerName: string): Promise<Player | null>;
-  getLeaderboard(): Promise<Player[]>;
+  getLeaderboard(offset: bigint, limit: bigint): Promise<Player[]>;
   // User profiles
   getCallerUserProfile(): Promise<UserProfile | null>;
   getUserProfile(principal: Principal): Promise<UserProfile | null>;
-  getAllUserProfiles(): Promise<UserProfile[]>;
+  getAllUserProfiles(offset: bigint, limit: bigint): Promise<UserProfile[]>;
   saveCallerUserProfile(profile: UserProfile): Promise<void>;
   updateCallerUserProfileStats(
     totalSpares: bigint,
@@ -50,21 +49,21 @@ export interface backendInterface {
   updateCallerAchievements(achievements: string[]): Promise<void>;
   updateCallerProfilePicture(picturePath: string): Promise<void>;
   // Chat
-  getMessages(gameId: bigint): Promise<ChatMessage[]>;
-  sendMessage(sender: string, message: string, gameId: bigint): Promise<void>;
+  getMessages(gameId: bigint, offset: bigint, limit: bigint): Promise<ChatMessage[]>;
+  sendMessage(message: string, gameId: bigint): Promise<void>;
   // Teams
-  getAllTeams(): Promise<Team[]>;
+  getAllTeams(offset: bigint, limit: bigint): Promise<Team[]>;
   getTeam(teamId: bigint): Promise<Team | null>;
   createTeam(name: string, description: string): Promise<bigint>;
   leaveTeam(teamId: bigint): Promise<void>;
   requestToJoinTeam(teamId: bigint): Promise<void>;
   approveJoinRequest(teamId: bigint, requester: Principal): Promise<void>;
   denyJoinRequest(teamId: bigint, requester: Principal): Promise<void>;
-  getJoinRequests(): Promise<JoinRequest[]>;
+  getJoinRequests(offset: bigint, limit: bigint): Promise<JoinRequest[]>;
   inviteToTeam(teamId: bigint, invitee: Principal): Promise<void>;
   acceptInvitation(teamId: bigint): Promise<void>;
   declineInvitation(teamId: bigint): Promise<void>;
-  getInvitations(): Promise<Invitation[]>;
+  getInvitations(offset: bigint, limit: bigint): Promise<Invitation[]>;
   // Access control
   initializeAccessControl(): Promise<void>;
   /**

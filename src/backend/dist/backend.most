@@ -105,33 +105,37 @@ type Wallet__442667382 =
   };
 actor {
   stable _nat64Max : Nat;
-  stable var _stable_adminIcpWallet : ?Text;
-  stable var _stable_chatMessages : [ChatMessage__1037536196];
-  stable var _stable_invitations : [Invitation__141447427];
-  stable var _stable_isInitialized : Bool;
-  stable var _stable_joinRequests : [JoinRequest__81935976];
-  stable var _stable_ledgerPrincipal : ?Principal;
-  stable var _stable_nextGameId : Nat;
-  stable var _stable_nextPaymentId : Nat;
-  stable var _stable_nextTeamId : Nat;
-  stable var _stable_nextTransactionId : Nat;
-  stable var _stable_totalSupply : Nat;
   stable accessControlState :
     {
       var adminAssigned : Bool;
       userRoles : Map__605269027<Principal, UserRole__1054455867>
     };
+  stable activeMintCallers :
+    {var root : Node__46230540<Principal, Bool>; var size : Nat__490723111};
   stable var adminIcpWallet : ?Text;
+  stable var burnFee : Nat;
   stable var chatMessages : [ChatMessage__1037536196];
+  stable claimedRewardGames :
+    {var root : Node__46230540<Nat, Bool>; var size : Nat__490723111};
+  stable var dailyRewardLimit : Nat;
+  stable dailyRewardTracking :
+    {
+      var root :
+        Node__46230540<Principal, {earnedToday : Nat; lastEarnTime : Int}>;
+      var size : Nat__490723111
+    };
+  stable gameStartTimes :
+    {var root : Node__46230540<Principal, Int>; var size : Nat__490723111};
   stable games :
     {
-      var root : Node__46230540<Text, Game__42905640>;
+      var root : Node__46230540<Nat, Game__42905640>;
       var size : Nat__490723111
     };
   stable var invitations : [Invitation__141447427];
   stable var isInitialized : Bool;
   stable var joinRequests : [JoinRequest__81935976];
   stable var ledgerPrincipal : ?Principal;
+  stable var matchReward : Nat;
   stable var nextGameId : Nat;
   stable var nextPaymentId : Nat;
   stable var nextTeamId : Nat;
@@ -157,6 +161,10 @@ actor {
       var blobsToRemove : Map__605269027<Text, Bool>;
       var references : Map__605269027<Text, FileReference__185630561>
     };
+  stable var rewardEarnerCount : Nat;
+  stable rewardEarners :
+    {var root : Node__46230540<Principal, Bool>; var size : Nat__490723111};
+  stable var rewardsPoolStart : Int;
   stable teams :
     {
       var root : Node__46230540<Nat, Team__97538390>;
@@ -173,6 +181,9 @@ actor {
       var size : Nat__490723111
     };
   stable var totalSupply : Nat;
+  stable var treasuryClaimedIcp : Nat;
+  stable usedMintBlockHeights :
+    {var root : Node__46230540<Nat, Bool>; var size : Nat__490723111};
   stable userBalances :
     {var root : Node__46230540<Principal, Nat>; var size : Nat__490723111};
   stable userProfiles :

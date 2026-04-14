@@ -17,7 +17,39 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     sourcemap: false,
-    minify: false,
+    minify: "esbuild",
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // ICP/dfinity stack — large, changes rarely
+          "vendor-dfinity": [
+            "@dfinity/agent",
+            "@dfinity/candid",
+            "@dfinity/principal",
+            "@dfinity/identity",
+          ],
+          // React core
+          "vendor-react": ["react", "react-dom"],
+          // Data fetching
+          "vendor-query": ["@tanstack/react-query"],
+          // UI component primitives
+          "vendor-ui": [
+            "@radix-ui/react-avatar",
+            "@radix-ui/react-dialog",
+            "@radix-ui/react-dropdown-menu",
+            "@radix-ui/react-label",
+            "@radix-ui/react-popover",
+            "@radix-ui/react-progress",
+            "@radix-ui/react-scroll-area",
+            "@radix-ui/react-select",
+            "@radix-ui/react-separator",
+            "@radix-ui/react-slot",
+            "@radix-ui/react-tabs",
+            "@radix-ui/react-tooltip",
+          ],
+        },
+      },
+    },
   },
   css: {
     postcss: "./postcss.config.js",

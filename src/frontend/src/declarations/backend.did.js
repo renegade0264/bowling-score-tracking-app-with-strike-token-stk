@@ -411,11 +411,6 @@ export const idlService = IDL.Service({
       [],
       [],
     ),
-  'updateCallerWallet' : IDL.Func(
-      [IDL.Nat],
-      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
-      [],
-    ),
   'updatePlayerStats' : IDL.Func(
       [IDL.Text, IDL.Nat, IDL.Nat, IDL.Nat, IDL.Nat, IDL.Nat],
       [],
@@ -835,11 +830,6 @@ export const idlFactory = ({ IDL }) => {
     'updateCallerUserProfileStats' : IDL.Func(
         [IDL.Nat, IDL.Nat, IDL.Nat, IDL.Nat, IDL.Nat],
         [],
-        [],
-      ),
-    'updateCallerWallet' : IDL.Func(
-        [IDL.Nat],
-        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
         [],
       ),
     'updatePlayerStats' : IDL.Func(

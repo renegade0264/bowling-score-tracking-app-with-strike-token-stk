@@ -196,11 +196,11 @@ export interface _SERVICE {
   >,
   'getAdminIcpWallet' : ActorMethod<[], [] | [string]>,
   'getAdminTreasuryAddress' : ActorMethod<[], [] | [string]>,
-  'getAllGames' : ActorMethod<[], Array<Game>>,
-  'getAllMessages' : ActorMethod<[], Array<ChatMessage>>,
-  'getAllPlayerStats' : ActorMethod<[], Array<Player>>,
-  'getAllTeams' : ActorMethod<[], Array<Team>>,
-  'getAllUserProfiles' : ActorMethod<[], Array<UserProfile>>,
+  'getAllGames' : ActorMethod<[bigint, bigint], Array<Game>>,
+  'getAllMessages' : ActorMethod<[bigint, bigint], Array<ChatMessage>>,
+  'getAllPlayerStats' : ActorMethod<[bigint, bigint], Array<Player>>,
+  'getAllTeams' : ActorMethod<[bigint, bigint], Array<Team>>,
+  'getAllUserProfiles' : ActorMethod<[bigint, bigint], Array<UserProfile>>,
   'getCallerAccountIds' : ActorMethod<[], [string, string]>,
   'getCallerAddresses' : ActorMethod<[], [string, string]>,
   'getCallerDerivedAccountId' : ActorMethod<[], string>,
@@ -222,15 +222,15 @@ export interface _SERVICE {
   >,
   'getFileReference' : ActorMethod<[string], [] | [FileReference]>,
   'getGame' : ActorMethod<[bigint], [] | [Game]>,
-  'getInvitations' : ActorMethod<[], Array<Invitation>>,
-  'getJoinRequests' : ActorMethod<[], Array<JoinRequest>>,
-  'getLeaderboard' : ActorMethod<[], Array<Player>>,
+  'getInvitations' : ActorMethod<[bigint, bigint], Array<Invitation>>,
+  'getJoinRequests' : ActorMethod<[bigint, bigint], Array<JoinRequest>>,
+  'getLeaderboard' : ActorMethod<[bigint, bigint], Array<Player>>,
   'getLedgerPrincipal' : ActorMethod<
     [],
     { 'ok' : Principal } |
       { 'err' : string }
   >,
-  'getMessages' : ActorMethod<[bigint], Array<ChatMessage>>,
+  'getMessages' : ActorMethod<[bigint, bigint, bigint], Array<ChatMessage>>,
   'getPaymentTransaction' : ActorMethod<[bigint], [] | [PaymentTransaction]>,
   'getPaymentTransactions' : ActorMethod<[], Array<PaymentTransaction>>,
   'getPlayerStats' : ActorMethod<[string], [] | [Player]>,
@@ -311,10 +311,10 @@ export interface _SERVICE {
   'requestToJoinTeam' : ActorMethod<[bigint], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'saveGame' : ActorMethod<
-    [Array<Player>, Array<Array<Frame>>, Array<bigint>, [] | [Principal]],
+    [Array<Player>, Array<Array<Frame>>, Array<bigint>],
     bigint
   >,
-  'sendMessage' : ActorMethod<[string, string, bigint], undefined>,
+  'sendMessage' : ActorMethod<[string, bigint], undefined>,
   'sendStkTokens' : ActorMethod<
     [string, bigint],
     { 'ok' : null } |
@@ -351,11 +351,6 @@ export interface _SERVICE {
   'updateCallerUserProfileStats' : ActorMethod<
     [bigint, bigint, bigint, bigint, bigint],
     undefined
-  >,
-  'updateCallerWallet' : ActorMethod<
-    [bigint],
-    { 'ok' : null } |
-      { 'err' : string }
   >,
   'updatePlayerStats' : ActorMethod<
     [string, bigint, bigint, bigint, bigint, bigint],

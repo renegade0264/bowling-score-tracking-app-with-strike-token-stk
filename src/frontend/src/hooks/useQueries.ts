@@ -1,5 +1,5 @@
 import { principalToAccountIdSync } from "@/lib/accountId";
-import { getIcpHost, sendIcpViaLedger } from "@/lib/icpLedger";
+import { sendIcpViaLedger } from "@/lib/icpLedger";
 import type {
   ChatMessage,
   Frame,
@@ -36,7 +36,7 @@ export function useGetAllGames() {
     queryKey: ["games"],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.getAllGames();
+      return actor.getAllGames(BigInt(0), BigInt(100));
     },
     enabled: !!actor && !isFetching,
   });
@@ -62,7 +62,7 @@ export function useGetAllPlayerStats() {
     queryKey: ["playerStats"],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.getAllPlayerStats();
+      return actor.getAllPlayerStats(BigInt(0), BigInt(100));
     },
     enabled: !!actor && !isFetching,
   });
@@ -88,7 +88,7 @@ export function useGetLeaderboard() {
     queryKey: ["leaderboard"],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.getLeaderboard();
+      return actor.getLeaderboard(BigInt(0), BigInt(100));
     },
     enabled: !!actor && !isFetching,
   });
@@ -101,7 +101,7 @@ export function useGetGlobalLeaderboard() {
     queryKey: ["globalLeaderboard"],
     queryFn: async () => {
       if (!actor) return [];
-      const profiles = await actor.getAllUserProfiles();
+      const profiles = await actor.getAllUserProfiles(BigInt(0), BigInt(100));
       return profiles
         .filter((profile) => profile.games.length > 0)
         .sort((a, b) => Number(b.averageScore) - Number(a.averageScore));
@@ -153,12 +153,8 @@ export function useGetUserGames(principal?: Principal) {
       const profile = await actor.getUserProfile(principal);
       if (!profile) return [];
 
-      const games: Game[] = [];
-      for (const gameId of profile.games) {
-        const game = await actor.getGame(gameId);
-        if (game) games.push(game);
-      }
-      return games;
+      const results = await Promise.all(profile.games.map((id) => actor.getGame(id)));
+      return results.filter((g): g is Game => g !== null && g !== undefined);
     },
     enabled: !!actor && !isFetching && !!principal,
   });
@@ -171,7 +167,7 @@ export function useGetMessages(gameId: bigint) {
     queryKey: ["messages", gameId.toString()],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.getMessages(gameId);
+      return actor.getMessages(gameId, BigInt(0), BigInt(200));
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 5000,
@@ -184,16 +180,14 @@ export function useSendMessage() {
 
   return useMutation({
     mutationFn: async ({
-      sender,
       message,
       gameId,
     }: {
-      sender: string;
       message: string;
       gameId: bigint;
     }) => {
       if (!actor) throw new Error("Actor not available");
-      return actor.sendMessage(sender, message, gameId);
+      return actor.sendMessage(message, gameId);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
@@ -219,7 +213,6 @@ export function useSaveGame() {
       totalScores: bigint[];
     }) => {
       if (!actor) throw new Error("Actor not available");
-      const owner = identity?.getPrincipal() || null;
 
       const updatedPlayers = players.map((player, playerIndex) => {
         const playerFrames = frames[playerIndex];
@@ -265,10 +258,9 @@ export function useSaveGame() {
         updatedPlayers,
         frames,
         totalScores,
-        owner,
       );
 
-      if (owner && identity) {
+      if (identity) {
         const userPrincipal = identity.getPrincipal();
         const userProfile = await actor.getUserProfile(userPrincipal);
         const userDisplayName = userProfile?.displayName;
@@ -315,19 +307,19 @@ export function useSaveGame() {
         }
       }
 
-      if (owner && identity) {
+      if (identity) {
         const userPrincipal = identity.getPrincipal();
         const existingProfile = await actor.getUserProfile(userPrincipal);
 
         if (existingProfile) {
-          const allUserGames: Game[] = [];
-          for (const gameId of existingProfile.games) {
-            const game = await actor.getGame(gameId);
-            if (game) allUserGames.push(game);
-          }
-
-          const currentGame = await actor.getGame(gameId);
-          if (currentGame) allUserGames.push(currentGame);
+          const [historyResults, currentGame] = await Promise.all([
+            Promise.all(existingProfile.games.map((id) => actor.getGame(id))),
+            actor.getGame(gameId),
+          ]);
+          const allUserGames: Game[] = [
+            ...historyResults.filter((g): g is Game => g !== null && g !== undefined),
+            ...(currentGame ? [currentGame] : []),
+          ];
 
           let totalStrikes = 0;
           let totalSpares = 0;
@@ -490,7 +482,7 @@ export function useGetAllTeams() {
     queryKey: ["teams"],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.getAllTeams();
+      return actor.getAllTeams(BigInt(0), BigInt(100));
     },
     enabled: !!actor && !isFetching,
   });
@@ -516,7 +508,7 @@ export function useGetUserTeams(principal?: Principal) {
     queryKey: ["userTeams", principal?.toString()],
     queryFn: async () => {
       if (!actor || !principal) return [];
-      const allTeams = await actor.getAllTeams();
+      const allTeams = await actor.getAllTeams(BigInt(0), BigInt(100));
       return allTeams.filter((team) =>
         team.members.some(
           (member) => member.toString() === principal.toString(),
@@ -596,7 +588,7 @@ export function useGetJoinRequests() {
     queryKey: ["joinRequests"],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.getJoinRequests();
+      return actor.getJoinRequests(BigInt(0), BigInt(100));
     },
     enabled: !!actor && !isFetching,
   });
@@ -672,7 +664,7 @@ export function useGetInvitations() {
     queryKey: ["invitations"],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.getInvitations();
+      return actor.getInvitations(BigInt(0), BigInt(100));
     },
     enabled: !!actor && !isFetching,
   });
@@ -764,7 +756,7 @@ export function useGetAllUserProfiles() {
     queryKey: ["allUserProfiles"],
     queryFn: async () => {
       if (!actor) return [];
-      return actor.getAllUserProfiles();
+      return actor.getAllUserProfiles(BigInt(0), BigInt(100));
     },
     enabled: !!actor && !isFetching,
   });
@@ -872,8 +864,6 @@ export function useGetTokenAllocations() {
     },
     enabled: !!actor && !isFetching,
     staleTime: 10000,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
   });
 }
 
@@ -1439,7 +1429,6 @@ export function useMintStkTokens() {
       onProgress?.(1);
       const blockHeight = await sendIcpViaLedger(
         identity,
-        getIcpHost(),
         adminTreasuryAddress,
         icpAmount,
       );
@@ -1699,7 +1688,6 @@ export function useSendIcpTokens() {
       // The canister CANNOT sign for the user's personal account — only the user can
       const blockHeight = await sendIcpViaLedger(
         identity,
-        getIcpHost(),
         recipientAccountId,
         amount,
       );
@@ -1841,9 +1829,15 @@ export function useLoginUser() {
       if (!actor) throw new Error("Actor not available");
       const result = await actor.loginUser();
       if ("ok" in result) return result.ok;
-      // "already registered" is expected for returning users — treat as success
       if ("err" in result && typeof result.err === "string") {
-        if (result.err.toLowerCase().includes("already")) return null;
+        // "already registered" and "not yet initialized" are both non-fatal:
+        // - "already": returning user who already has a role
+        // - "not yet initialized": admin hasn't called initializeAccessControl yet
+        //   (happens on first admin visit since both calls are concurrent)
+        const msg = result.err.toLowerCase();
+        if (msg.includes("already") || msg.includes("not yet initialized")) {
+          return null;
+        }
         throw new Error(result.err);
       }
       return null;

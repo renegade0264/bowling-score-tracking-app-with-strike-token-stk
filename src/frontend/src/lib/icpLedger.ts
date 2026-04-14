@@ -1,8 +1,12 @@
-import { Actor, HttpAgent } from "@dfinity/agent";
-import type { Identity } from "@dfinity/agent";
+import { loadConfig } from "@caffeineai/core-infrastructure";
+import { Actor, HttpAgent, type Identity } from "@icp-sdk/core/agent";
 
 // ICP Ledger canister ID (mainnet)
 const ICP_LEDGER_CANISTER_ID = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+
+// Cache agents by identity object reference. WeakMap ensures entries are
+// garbage-collected automatically when the identity is dropped (e.g. on logout).
+const actorCache = new WeakMap<object, IcpLedgerActor>();
 
 // ICP Ledger IDL (legacy transfer interface — NOT ICRC-1)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -50,15 +54,19 @@ interface IcpLedgerActor {
 /**
  * Create an ICP Ledger actor using the user's authenticated Identity.
  * The identity must be the user's Internet Identity (from useInternetIdentity).
+ * Actors are cached by identity object reference — one agent per session.
  */
 export async function createIcpLedgerActor(
   identity: Identity,
-  host: string,
 ): Promise<IcpLedgerActor> {
-  const agent = new HttpAgent({
-    identity,
-    host,
-  });
+  const cached = actorCache.get(identity);
+  if (cached) return cached;
+
+  const config = await loadConfig();
+  // backend_host is undefined in production → HttpAgent defaults to https://ic0.app
+  const host = config.backend_host;
+
+  const agent = new HttpAgent({ identity, host });
 
   // Fetch root key on local/dev environments
   if (host?.includes("localhost") || host?.includes("127.0.0.1")) {
@@ -69,10 +77,13 @@ export async function createIcpLedgerActor(
     }
   }
 
-  return Actor.createActor(icpLedgerIdl, {
+  const actor = Actor.createActor(icpLedgerIdl, {
     agent,
     canisterId: ICP_LEDGER_CANISTER_ID,
   }) as unknown as IcpLedgerActor;
+
+  actorCache.set(identity, actor);
+  return actor;
 }
 
 /**
@@ -94,17 +105,13 @@ export function hexToBytes(hex: string): number[] {
  * Transfer ICP on-chain using the user's authenticated Internet Identity.
  *
  * @param identity  The user's Internet Identity (from useInternetIdentity().identity)
- * @param host      The IC host (e.g. "https://ic0.app" or "http://localhost:8080")
  * @param toAccountIdHex  Recipient's 64-char hex ICP Account ID
  * @param amountE8s Amount to send in e8s (bigint), NOT including fee
  * @returns Block height (bigint) on success
  * @throws Human-readable error on failure
  */
 export async function sendIcpViaLedger(
-  // Accept any identity-like object and cast to @dfinity/agent Identity
-  // The @icp-sdk/core/agent Identity is compatible at runtime
-  identity: unknown,
-  host: string,
+  identity: Identity | undefined,
   toAccountIdHex: string,
   amountE8s: bigint,
 ): Promise<bigint> {
@@ -113,7 +120,7 @@ export async function sendIcpViaLedger(
   const toBytes = hexToBytes(toAccountIdHex);
   const feeE8s = 10_000n; // 0.0001 ICP
 
-  const ledger = await createIcpLedgerActor(identity as Identity, host);
+  const ledger = await createIcpLedgerActor(identity);
 
   const result = await ledger.transfer({
     to: toBytes,
@@ -154,16 +161,3 @@ export async function sendIcpViaLedger(
   throw new Error(`ICP transfer failed: ${JSON.stringify(err)}`);
 }
 
-/**
- * Get the IC host for the current environment.
- */
-export function getIcpHost(): string {
-  if (
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1")
-  ) {
-    return `http://${window.location.hostname}:${window.location.port || 8080}`;
-  }
-  return "https://ic0.app";
-}

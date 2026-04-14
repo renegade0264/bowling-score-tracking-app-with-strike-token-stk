@@ -279,11 +279,11 @@ export interface backendInterface {
     }>;
     getAdminIcpWallet(): Promise<string | null>;
     getAdminTreasuryAddress(): Promise<string | null>;
-    getAllGames(): Promise<Array<Game>>;
-    getAllMessages(): Promise<Array<ChatMessage>>;
-    getAllPlayerStats(): Promise<Array<Player>>;
-    getAllTeams(): Promise<Array<Team>>;
-    getAllUserProfiles(): Promise<Array<UserProfile>>;
+    getAllGames(offset: bigint, limit: bigint): Promise<Array<Game>>;
+    getAllMessages(offset: bigint, limit: bigint): Promise<Array<ChatMessage>>;
+    getAllPlayerStats(offset: bigint, limit: bigint): Promise<Array<Player>>;
+    getAllTeams(offset: bigint, limit: bigint): Promise<Array<Team>>;
+    getAllUserProfiles(offset: bigint, limit: bigint): Promise<Array<UserProfile>>;
     getCallerAccountIds(): Promise<[string, string]>;
     getCallerAddresses(): Promise<[string, string]>;
     getCallerDerivedAccountId(): Promise<string>;
@@ -304,9 +304,9 @@ export interface backendInterface {
     getCallerWalletSummary(): Promise<[bigint, Array<TokenTransaction>, Array<TokenTransaction>, string, string]>;
     getFileReference(path: string): Promise<FileReference | null>;
     getGame(gameId: bigint): Promise<Game | null>;
-    getInvitations(): Promise<Array<Invitation>>;
-    getJoinRequests(): Promise<Array<JoinRequest>>;
-    getLeaderboard(): Promise<Array<Player>>;
+    getInvitations(offset: bigint, limit: bigint): Promise<Array<Invitation>>;
+    getJoinRequests(offset: bigint, limit: bigint): Promise<Array<JoinRequest>>;
+    getLeaderboard(offset: bigint, limit: bigint): Promise<Array<Player>>;
     getLedgerPrincipal(): Promise<{
         __kind__: "ok";
         ok: Principal;
@@ -314,7 +314,7 @@ export interface backendInterface {
         __kind__: "err";
         err: string;
     }>;
-    getMessages(gameId: bigint): Promise<Array<ChatMessage>>;
+    getMessages(gameId: bigint, offset: bigint, limit: bigint): Promise<Array<ChatMessage>>;
     getPaymentTransaction(id: bigint): Promise<PaymentTransaction | null>;
     getPaymentTransactions(): Promise<Array<PaymentTransaction>>;
     getPlayerStats(playerName: string): Promise<Player | null>;
@@ -402,8 +402,8 @@ export interface backendInterface {
     registerFileReference(path: string, hash: string): Promise<void>;
     requestToJoinTeam(teamId: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    saveGame(players: Array<Player>, frames: Array<Array<Frame>>, totalScores: Array<bigint>, owner: Principal | null): Promise<bigint>;
-    sendMessage(sender: string, message: string, gameId: bigint): Promise<void>;
+    saveGame(players: Array<Player>, frames: Array<Array<Frame>>, totalScores: Array<bigint>): Promise<bigint>;
+    sendMessage(message: string, gameId: bigint): Promise<void>;
     sendStkTokens(recipient: string, amount: bigint): Promise<{
         __kind__: "ok";
         ok: null;
@@ -450,13 +450,6 @@ export interface backendInterface {
     updateCallerAchievements(achievements: Array<string>): Promise<void>;
     updateCallerProfilePicture(picturePath: string): Promise<void>;
     updateCallerUserProfileStats(totalSpares: bigint, totalStrikes: bigint, totalPoints: bigint, highestScore: bigint, gamesPlayed: bigint): Promise<void>;
-    updateCallerWallet(stkBalance: bigint): Promise<{
-        __kind__: "ok";
-        ok: null;
-    } | {
-        __kind__: "err";
-        err: string;
-    }>;
     updatePlayerStats(name: string, totalSpares: bigint, totalStrikes: bigint, totalPoints: bigint, highestScore: bigint, gamesPlayed: bigint): Promise<void>;
     updatePriceFeed(source: string, icpUsd: bigint, status: string): Promise<void>;
     updateTeamStats(teamId: bigint, averageScore: bigint, totalGames: bigint, bestScore: bigint): Promise<void>;
@@ -806,73 +799,73 @@ export class Backend implements backendInterface {
             return from_candid_opt_n18(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getAllGames(): Promise<Array<Game>> {
+    async getAllGames(offset: bigint, limit: bigint): Promise<Array<Game>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getAllGames();
+                const result = await this.actor.getAllGames(offset, limit);
                 return from_candid_vec_n19(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getAllGames();
+            const result = await this.actor.getAllGames(offset, limit);
             return from_candid_vec_n19(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getAllMessages(): Promise<Array<ChatMessage>> {
+    async getAllMessages(offset: bigint, limit: bigint): Promise<Array<ChatMessage>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getAllMessages();
+                const result = await this.actor.getAllMessages(offset, limit);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getAllMessages();
+            const result = await this.actor.getAllMessages(offset, limit);
             return result;
         }
     }
-    async getAllPlayerStats(): Promise<Array<Player>> {
+    async getAllPlayerStats(offset: bigint, limit: bigint): Promise<Array<Player>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getAllPlayerStats();
+                const result = await this.actor.getAllPlayerStats(offset, limit);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getAllPlayerStats();
+            const result = await this.actor.getAllPlayerStats(offset, limit);
             return result;
         }
     }
-    async getAllTeams(): Promise<Array<Team>> {
+    async getAllTeams(offset: bigint, limit: bigint): Promise<Array<Team>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getAllTeams();
+                const result = await this.actor.getAllTeams(offset, limit);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getAllTeams();
+            const result = await this.actor.getAllTeams(offset, limit);
             return result;
         }
     }
-    async getAllUserProfiles(): Promise<Array<UserProfile>> {
+    async getAllUserProfiles(offset: bigint, limit: bigint): Promise<Array<UserProfile>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getAllUserProfiles();
+                const result = await this.actor.getAllUserProfiles(offset, limit);
                 return from_candid_vec_n26(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getAllUserProfiles();
+            const result = await this.actor.getAllUserProfiles(offset, limit);
             return from_candid_vec_n26(this._uploadFile, this._downloadFile, result);
         }
     }
@@ -1102,45 +1095,45 @@ export class Backend implements backendInterface {
             return from_candid_opt_n37(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getInvitations(): Promise<Array<Invitation>> {
+    async getInvitations(offset: bigint, limit: bigint): Promise<Array<Invitation>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getInvitations();
+                const result = await this.actor.getInvitations(offset, limit);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getInvitations();
+            const result = await this.actor.getInvitations(offset, limit);
             return result;
         }
     }
-    async getJoinRequests(): Promise<Array<JoinRequest>> {
+    async getJoinRequests(offset: bigint, limit: bigint): Promise<Array<JoinRequest>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getJoinRequests();
+                const result = await this.actor.getJoinRequests(offset, limit);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getJoinRequests();
+            const result = await this.actor.getJoinRequests(offset, limit);
             return result;
         }
     }
-    async getLeaderboard(): Promise<Array<Player>> {
+    async getLeaderboard(offset: bigint, limit: bigint): Promise<Array<Player>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getLeaderboard();
+                const result = await this.actor.getLeaderboard(offset, limit);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getLeaderboard();
+            const result = await this.actor.getLeaderboard(offset, limit);
             return result;
         }
     }
@@ -1164,17 +1157,17 @@ export class Backend implements backendInterface {
             return from_candid_variant_n38(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getMessages(arg0: bigint): Promise<Array<ChatMessage>> {
+    async getMessages(arg0: bigint, offset: bigint, limit: bigint): Promise<Array<ChatMessage>> {
         if (this.processError) {
             try {
-                const result = await this.actor.getMessages(arg0);
+                const result = await this.actor.getMessages(arg0, offset, limit);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.getMessages(arg0);
+            const result = await this.actor.getMessages(arg0, offset, limit);
             return result;
         }
     }
@@ -1694,31 +1687,31 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async saveGame(arg0: Array<Player>, arg1: Array<Array<Frame>>, arg2: Array<bigint>, arg3: Principal | null): Promise<bigint> {
+    async saveGame(arg0: Array<Player>, arg1: Array<Array<Frame>>, arg2: Array<bigint>): Promise<bigint> {
         if (this.processError) {
             try {
-                const result = await this.actor.saveGame(arg0, to_candid_vec_n54(this._uploadFile, this._downloadFile, arg1), arg2, to_candid_opt_n51(this._uploadFile, this._downloadFile, arg3));
+                const result = await this.actor.saveGame(arg0, to_candid_vec_n54(this._uploadFile, this._downloadFile, arg1), arg2);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.saveGame(arg0, to_candid_vec_n54(this._uploadFile, this._downloadFile, arg1), arg2, to_candid_opt_n51(this._uploadFile, this._downloadFile, arg3));
+            const result = await this.actor.saveGame(arg0, to_candid_vec_n54(this._uploadFile, this._downloadFile, arg1), arg2);
             return result;
         }
     }
-    async sendMessage(arg0: string, arg1: string, arg2: bigint): Promise<void> {
+    async sendMessage(arg0: string, arg1: bigint): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.sendMessage(arg0, arg1, arg2);
+                const result = await this.actor.sendMessage(arg0, arg1);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.sendMessage(arg0, arg1, arg2);
+            const result = await this.actor.sendMessage(arg0, arg1);
             return result;
         }
     }
@@ -1896,26 +1889,6 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.updateCallerUserProfileStats(arg0, arg1, arg2, arg3, arg4);
             return result;
-        }
-    }
-    async updateCallerWallet(arg0: bigint): Promise<{
-        __kind__: "ok";
-        ok: null;
-    } | {
-        __kind__: "err";
-        err: string;
-    }> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.updateCallerWallet(arg0);
-                return from_candid_variant_n10(this._uploadFile, this._downloadFile, result);
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.updateCallerWallet(arg0);
-            return from_candid_variant_n10(this._uploadFile, this._downloadFile, result);
         }
     }
     async updatePlayerStats(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint, arg5: bigint): Promise<void> {
