@@ -197,6 +197,7 @@ export interface backendInterface {
     getCallerIcpTransactions(): Promise<Array<TokenTransaction>>;
     getCallerPrincipalId(): Promise<string>;
     getCallerStkBalance(): Promise<bigint>;
+    getCallerStkBalanceLive(): Promise<bigint>;
     getCallerStkTransactions(): Promise<Array<TokenTransaction>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;

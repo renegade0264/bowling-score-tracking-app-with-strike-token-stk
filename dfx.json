@@ -9,6 +9,11 @@
       "type": "assets",
       "source": ["src/frontend/dist"],
       "dependencies": ["backend"]
+    },
+    "stk_ledger": {
+      "type": "custom",
+      "candid": "icrc1/ic-icrc1-ledger.did",
+      "wasm": "icrc1/ic-icrc1-ledger.wasm"
     }
   },
   "defaults": {

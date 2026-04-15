@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import {
   useGetCallerIcpBalance,
+  useGetCallerStkBalanceLive,
   useGetCallerUserProfile,
   useGetCallerWallet,
   useInitializeWallet,
@@ -79,6 +80,11 @@ export function WalletPage({ onNavigate }: WalletPageProps) {
     isLoading: icpBalanceLoading,
     refetch: refetchIcpBalance,
   } = useGetCallerIcpBalance();
+  const {
+    data: stkBalanceLive,
+    isLoading: stkBalanceLiveLoading,
+    refetch: refetchStkBalanceLive,
+  } = useGetCallerStkBalanceLive();
   const { data: profile } = useGetCallerUserProfile();
   const { mutate: initWallet, isPending: isInitializing } =
     useInitializeWallet();
@@ -223,7 +229,12 @@ export function WalletPage({ onNavigate }: WalletPageProps) {
   };
 
   const icpBalanceICP = Number(icpBalance ?? BigInt(0)) / 100000000;
-  const stkBalance = Number(wallet?.stkBalance ?? BigInt(0));
+  // Live ICRC-1 balance in e8s — divide by 1e8 to display as STK units.
+  // Falls back to the Map-cached wallet balance when the ledger query hasn't resolved yet.
+  const stkBalanceLiveSTK = Number(stkBalanceLive ?? BigInt(0)) / 100_000_000;
+  const stkBalance = stkBalanceLive !== undefined
+    ? stkBalanceLiveSTK
+    : Number(wallet?.stkBalance ?? BigInt(0));
   const currentTransactions =
     activeTab === "icp"
       ? (wallet?.icpTransactions ?? [])
@@ -704,10 +715,12 @@ export function WalletPage({ onNavigate }: WalletPageProps) {
                         STK Balance
                       </p>
                       <p className="text-4xl font-bold text-primary">
-                        {stkBalance.toLocaleString()} STK
+                        {stkBalanceLiveLoading
+                          ? "…"
+                          : stkBalance.toLocaleString(undefined, { maximumFractionDigits: 8 })} STK
                       </p>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Strike Tokens • Internal token system
+                        Strike Tokens • ICRC-1 Ledger
                       </p>
                     </div>
                     <div className="flex flex-col space-y-2">
@@ -1015,6 +1028,7 @@ export function WalletPage({ onNavigate }: WalletPageProps) {
                   onClick={() => {
                     refetchWallet();
                     refetchIcpBalance();
+                    refetchStkBalanceLive();
                   }}
                   className="w-full"
                 >

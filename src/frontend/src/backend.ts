@@ -297,6 +297,7 @@ export interface backendInterface {
     getCallerIcpTransactions(): Promise<Array<TokenTransaction>>;
     getCallerPrincipalId(): Promise<string>;
     getCallerStkBalance(): Promise<bigint>;
+    getCallerStkBalanceLive(): Promise<bigint>;
     getCallerStkTransactions(): Promise<Array<TokenTransaction>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
@@ -982,6 +983,21 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getCallerStkBalance();
+            return result;
+        }
+    }
+    // Returns balance in e8s from the ICRC-1 ledger (authoritative); divide by 1e8 for STK display.
+    async getCallerStkBalanceLive(): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await (this.actor as any).getCallerStkBalanceLive();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await (this.actor as any).getCallerStkBalanceLive();
             return result;
         }
     }

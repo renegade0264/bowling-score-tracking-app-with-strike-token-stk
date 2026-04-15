@@ -1,0 +1,44 @@
+(variant {
+  Init = record {
+    token_name = "Strike Token";
+    token_symbol = "STK";
+    decimals = opt (8 : nat8);
+    transfer_fee = 1_000_000 : nat;
+    minting_account = record {
+      owner = principal "a6p2m-tiaaa-aaaal-qwxba-cai";
+      subaccount = null;
+    };
+    fee_collector_account = null;
+    initial_balances = vec {
+      record {
+        record {
+          owner = principal "xai2m-ngxnm-xmdef-p75bs-rnfux-cwlos-47xke-rrxst-bmjx7-gqfnb-fae";
+          subaccount = null;
+        };
+        1_300_000_000 : nat;
+      };
+      record {
+        record {
+          owner = principal "a6p2m-tiaaa-aaaal-qwxba-cai";
+          subaccount = opt blob "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\01";
+        };
+        99_998_700_000_000 : nat;
+      };
+    };
+    maximum_number_of_accounts = null;
+    accounts_overflow_trim_quantity = null;
+    archive_options = record {
+      trigger_threshold = 2000 : nat64;
+      num_blocks_to_archive = 1000 : nat64;
+      controller_id = principal "cmanb-aejth-shdoi-krt5o-ijy5p-tineu-7lrav-guzka-k4qxk-2f55o-3qe";
+      cycles_for_archive_creation = null;
+      max_message_size_bytes = null;
+      node_max_memory_size_bytes = null;
+    };
+    metadata = vec {};
+    feature_flags = opt record {
+      icrc2 = true;
+    };
+    max_memo_length = null;
+  }
+})

@@ -1622,6 +1622,27 @@ export function useGetCallerIcpBalance() {
   });
 }
 
+export function useGetCallerStkBalanceLive() {
+  const { actor, isFetching } = useActor();
+  const { identity } = useInternetIdentity();
+
+  return useQuery({
+    queryKey: ["callerStkBalanceLive", identity?.getPrincipal().toString()],
+    queryFn: async () => {
+      if (!actor || !identity) return BigInt(0);
+      try {
+        return await actor.getCallerStkBalanceLive();
+      } catch (error) {
+        console.error("Failed to fetch live STK balance:", error);
+        return BigInt(0);
+      }
+    },
+    enabled: !!actor && !isFetching && !!identity,
+    refetchInterval: 15000, // Refresh every 15 seconds
+    staleTime: 10000,
+  });
+}
+
 export function useInitializeWallet() {
   const { actor } = useActor();
   const queryClient = useQueryClient();

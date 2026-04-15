@@ -48,6 +48,50 @@ persistent actor BowlingScoreTracker {
     } -> async TransferResult;
   };
 
+  // ===== ICRC-1 STK LEDGER TYPES =====
+
+  let STK_LEDGER_ID : Text = "5h55w-zaaaa-aaaal-qwzjq-cai";
+  let STK_E8S : Nat = 100_000_000; // 1 STK unit = 100_000_000 base units
+  let STK_TRANSFER_FEE : Nat = 1_000_000; // 0.01 STK per transfer
+
+  // Treasury subaccount [1]: 31 zero bytes followed by 0x01.
+  // Holds 999,987 STK on the ICRC-1 ledger; all pool distributions pull from here.
+  let TREASURY_SUBACCOUNT : Blob = "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\01";
+
+  type Icrc1Account = {
+    owner : Principal;
+    subaccount : ?Blob;
+  };
+
+  type Icrc1TransferArg = {
+    from_subaccount : ?Blob;
+    to : Icrc1Account;
+    amount : Nat;
+    fee : ?Nat;
+    memo : ?Blob;
+    created_at_time : ?Nat64;
+  };
+
+  type Icrc1TransferError = {
+    #BadFee : { expected_fee : Nat };
+    #BadBurn : { min_burn_amount : Nat };
+    #InsufficientFunds : { balance : Nat };
+    #TooOld;
+    #CreatedInFuture : { ledger_time : Nat64 };
+    #Duplicate : { duplicate_of : Nat };
+    #TemporarilyUnavailable;
+    #GenericError : { error_code : Nat; message : Text };
+  };
+
+  type StkLedger = actor {
+    icrc1_balance_of : shared query (Icrc1Account) -> async Nat;
+    icrc1_transfer : shared (Icrc1TransferArg) -> async { #Ok : Nat; #Err : Icrc1TransferError };
+  };
+
+  func getStkLedger() : StkLedger {
+    actor (STK_LEDGER_ID) : StkLedger
+  };
+
   // ===== PUBLIC TYPES =====
 
   type Player = {
@@ -1114,6 +1158,41 @@ persistent actor BowlingScoreTracker {
         });
         tokenTransactions.add(poolTxId, poolTx);
         tokenTransactions.add(userTxId, userTx);
+
+        // Dual-write: move from treasury subaccount [01] to recipient's ICRC-1 account.
+        // Best-effort — Map update above is authoritative.
+        let e8s = amount * STK_E8S;
+        let ts = Nat64.fromNat(Int.abs(Time.now()));
+        try {
+          let stkLedger = getStkLedger();
+          let r = await stkLedger.icrc1_transfer({
+            from_subaccount = ?TREASURY_SUBACCOUNT;
+            to = { owner = recipientPrincipal; subaccount = null };
+            amount = e8s;
+            fee = ?STK_TRANSFER_FEE;
+            memo = null;
+            created_at_time = ?ts;
+          });
+          switch (r) {
+            case (#Ok(blk)) Debug.print("ICRC-1 pool->user OK block=" # Nat.toText(blk));
+            case (#Err(e)) {
+              let msg = switch (e) {
+                case (#InsufficientFunds { balance }) "InsufficientFunds bal=" # Nat.toText(balance);
+                case (#BadFee { expected_fee }) "BadFee expected=" # Nat.toText(expected_fee);
+                case (#Duplicate { duplicate_of }) "Duplicate of " # Nat.toText(duplicate_of);
+                case (#GenericError { message }) message;
+                case (#TooOld) "TooOld";
+                case (#CreatedInFuture _) "CreatedInFuture";
+                case (#TemporarilyUnavailable) "TemporarilyUnavailable";
+                case (#BadBurn _) "BadBurn";
+              };
+              Debug.print("ICRC-1 pool->user FAILED (Map OK): " # msg);
+            };
+          };
+        } catch (e) {
+          Debug.print("ICRC-1 pool->user exception (Map OK): " # e.message());
+        };
+
         #ok(());
       };
       case null { #err("Pool not found") };
@@ -1310,6 +1389,21 @@ persistent actor BowlingScoreTracker {
     switch (userWallets.get(caller)) {
       case (?wallet) wallet.stkBalance;
       case null 0;
+    };
+  };
+
+  // Queries the ICRC-1 STK ledger as the authoritative source, falls back to the
+  // Map cache if the ledger is unreachable. Returns base units (e8s): 1 STK = 100_000_000.
+  public shared ({ caller }) func getCallerStkBalanceLive() : async Nat {
+    try {
+      let stkLedger = getStkLedger();
+      await stkLedger.icrc1_balance_of({ owner = caller; subaccount = null });
+    } catch (_) {
+      // Map fallback — convert whole STK units to e8s for a consistent return type
+      switch (userWallets.get(caller)) {
+        case (?wallet) wallet.stkBalance * STK_E8S;
+        case null 0;
+      };
     };
   };
 
@@ -1752,6 +1846,44 @@ persistent actor BowlingScoreTracker {
     };
 
     activeMintCallers.remove(caller);
+
+    // Step 12: Dual-write — move STK from treasury subaccount [01] to caller's ICRC-1 account.
+    // Using the treasury (not the minting account) keeps total supply fixed at 1,000,000 STK.
+    // This is best-effort: Map is authoritative; ICRC-1 failure does not revert the mint.
+    let e8sAmount = stkAmount * STK_E8S;
+    let now64 = Nat64.fromNat(Int.abs(Time.now()));
+    try {
+      let stkLedger = getStkLedger();
+      let result = await stkLedger.icrc1_transfer({
+        from_subaccount = ?TREASURY_SUBACCOUNT;
+        to = { owner = caller; subaccount = null };
+        amount = e8sAmount;
+        fee = ?STK_TRANSFER_FEE;
+        memo = null;
+        created_at_time = ?now64;
+      });
+      switch (result) {
+        case (#Ok(blockIdx)) {
+          Debug.print("STK ICRC-1 mint OK: block " # Nat.toText(blockIdx) # " — " # Nat.toText(stkAmount) # " STK to " # caller.toText());
+        };
+        case (#Err(e)) {
+          let errMsg = switch (e) {
+            case (#BadFee { expected_fee }) "BadFee expected=" # Nat.toText(expected_fee);
+            case (#InsufficientFunds { balance }) "InsufficientFunds bal=" # Nat.toText(balance);
+            case (#Duplicate { duplicate_of }) "Duplicate of " # Nat.toText(duplicate_of);
+            case (#GenericError { message }) "GenericError: " # message;
+            case (#TooOld) "TooOld";
+            case (#CreatedInFuture _) "CreatedInFuture";
+            case (#TemporarilyUnavailable) "TemporarilyUnavailable";
+            case (#BadBurn _) "BadBurn";
+          };
+          Debug.print("STK ICRC-1 mint FAILED (Map write succeeded): " # errMsg);
+        };
+      };
+    } catch (e) {
+      Debug.print("STK ICRC-1 mint exception (Map write succeeded): " # e.message());
+    };
+
     #ok(());
   };
 
@@ -1912,6 +2044,40 @@ persistent actor BowlingScoreTracker {
         tokenPools.add("In-Game Rewards", { pool with remaining = safeSub(pool.remaining, reward) });
       };
       case null {};
+    };
+
+    // Dual-write: move reward from treasury subaccount [01] to caller's ICRC-1 account.
+    // Best-effort — wallet and pool updates above are authoritative.
+    let rewardE8s = reward * STK_E8S;
+    let rewardTs = Nat64.fromNat(Int.abs(Time.now()));
+    try {
+      let stkLedger = getStkLedger();
+      let r = await stkLedger.icrc1_transfer({
+        from_subaccount = ?TREASURY_SUBACCOUNT;
+        to = { owner = caller; subaccount = null };
+        amount = rewardE8s;
+        fee = ?STK_TRANSFER_FEE;
+        memo = null;
+        created_at_time = ?rewardTs;
+      });
+      switch (r) {
+        case (#Ok(blk)) Debug.print("ICRC-1 reward OK block=" # Nat.toText(blk));
+        case (#Err(e)) {
+          let msg = switch (e) {
+            case (#InsufficientFunds { balance }) "InsufficientFunds bal=" # Nat.toText(balance);
+            case (#BadFee { expected_fee }) "BadFee expected=" # Nat.toText(expected_fee);
+            case (#Duplicate { duplicate_of }) "Duplicate of " # Nat.toText(duplicate_of);
+            case (#GenericError { message }) message;
+            case (#TooOld) "TooOld";
+            case (#CreatedInFuture _) "CreatedInFuture";
+            case (#TemporarilyUnavailable) "TemporarilyUnavailable";
+            case (#BadBurn _) "BadBurn";
+          };
+          Debug.print("ICRC-1 reward FAILED (Map OK): " # msg);
+        };
+      };
+    } catch (e) {
+      Debug.print("ICRC-1 reward exception (Map OK): " # e.message());
     };
 
     #ok(reward)
