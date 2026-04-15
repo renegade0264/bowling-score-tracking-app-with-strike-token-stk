@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import { useGetAllGames, useGetUserGames } from "@/hooks/useQueries";
@@ -142,18 +143,39 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
     </Card>
   );
 
-  if (allGamesLoading || (identity && userGamesLoading)) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-            <p className="text-muted-foreground">Loading game history...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const isLoading = allGamesLoading || (!!identity && userGamesLoading);
+
+  const SkeletonCards = () => (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Card key={i}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-5 w-20" />
+            </div>
+            <div className="flex items-center space-x-4 mt-1">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3">
+              {Array.from({ length: 2 }).map((_, j) => (
+                <div key={j} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  <div className="space-y-1">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-3 w-14" />
+                  </div>
+                  <Skeleton className="h-7 w-10" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -177,15 +199,15 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
           <Tabs defaultValue="personal" className="space-y-6">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="personal">
-                My Games ({userGames.length})
+                My Games {!isLoading && `(${userGames.length})`}
               </TabsTrigger>
               <TabsTrigger value="all">
-                All Games ({allGames.length})
+                All Games {!isLoading && `(${allGames.length})`}
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="personal" className="space-y-4">
-              {userGames.length === 0 ? (
+              {isLoading ? <SkeletonCards /> : userGames.length === 0 ? (
                 <Card>
                   <CardContent className="text-center py-12">
                     <Trophy className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
@@ -211,7 +233,7 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
             </TabsContent>
 
             <TabsContent value="all" className="space-y-4">
-              {allGames.length === 0 ? (
+              {isLoading ? <SkeletonCards /> : allGames.length === 0 ? (
                 <Card>
                   <CardContent className="text-center py-12">
                     <Trophy className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
@@ -238,7 +260,7 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
           </Tabs>
         ) : (
           <div className="space-y-4">
-            {allGames.length === 0 ? (
+            {isLoading ? <SkeletonCards /> : allGames.length === 0 ? (
               <Card>
                 <CardContent className="text-center py-12">
                   <Trophy className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />

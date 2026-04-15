@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import {
@@ -163,18 +164,28 @@ export function LeaderboardPage({ onNavigate }: LeaderboardPageProps) {
     );
   };
 
-  if (classicLoading || globalLoading || gamesLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-            <p className="text-muted-foreground">Loading leaderboard...</p>
+  const isLoading = classicLoading || globalLoading || gamesLoading;
+
+  const SkeletonRows = () => (
+    <div className="space-y-3">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+          <div className="flex items-center space-x-4">
+            <Skeleton className="w-10 h-10 rounded-full" />
+            <Skeleton className="w-10 h-10 rounded-full" />
+            <div className="space-y-1">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+          </div>
+          <div className="space-y-1 text-right">
+            <Skeleton className="h-6 w-10 ml-auto" />
+            <Skeleton className="h-3 w-14 ml-auto" />
           </div>
         </div>
-      </div>
-    );
-  }
+      ))}
+    </div>
+  );
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -197,14 +208,14 @@ export function LeaderboardPage({ onNavigate }: LeaderboardPageProps) {
           <Card>
             <CardContent className="p-6 text-center">
               <Trophy className="w-8 h-8 mx-auto mb-2 text-primary" />
-              <p className="text-2xl font-bold">{getTotalGamesPlayed()}</p>
+              {isLoading ? <Skeleton className="h-8 w-12 mx-auto mb-1" /> : <p className="text-2xl font-bold">{getTotalGamesPlayed()}</p>}
               <p className="text-sm text-muted-foreground">Total Games</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-6 text-center">
               <Users className="w-8 h-8 mx-auto mb-2 text-primary" />
-              <p className="text-2xl font-bold">{globalLeaderboard.length}</p>
+              {isLoading ? <Skeleton className="h-8 w-12 mx-auto mb-1" /> : <p className="text-2xl font-bold">{globalLeaderboard.length}</p>}
               <p className="text-sm text-muted-foreground">
                 Registered Players
               </p>
@@ -213,7 +224,7 @@ export function LeaderboardPage({ onNavigate }: LeaderboardPageProps) {
           <Card>
             <CardContent className="p-6 text-center">
               <Target className="w-8 h-8 mx-auto mb-2 text-primary" />
-              <p className="text-2xl font-bold">{getHighestSingleScore()}</p>
+              {isLoading ? <Skeleton className="h-8 w-12 mx-auto mb-1" /> : <p className="text-2xl font-bold">{getHighestSingleScore()}</p>}
               <p className="text-sm text-muted-foreground">Highest Score</p>
             </CardContent>
           </Card>
@@ -222,15 +233,15 @@ export function LeaderboardPage({ onNavigate }: LeaderboardPageProps) {
         <Tabs defaultValue="global" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="global">
-              Global Rankings ({globalLeaderboard.length})
+              Global Rankings {!isLoading && `(${globalLeaderboard.length})`}
             </TabsTrigger>
             <TabsTrigger value="classic">
-              All Players ({classicLeaderboard.length})
+              All Players {!isLoading && `(${classicLeaderboard.length})`}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="global" className="space-y-6">
-            {globalLeaderboard.length === 0 ? (
+            {isLoading ? <Card><CardContent className="p-4"><SkeletonRows /></CardContent></Card> : globalLeaderboard.length === 0 ? (
               <Card>
                 <CardContent className="text-center py-12">
                   <Crown className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
@@ -333,7 +344,7 @@ export function LeaderboardPage({ onNavigate }: LeaderboardPageProps) {
           </TabsContent>
 
           <TabsContent value="classic" className="space-y-6">
-            {classicLeaderboard.length === 0 ? (
+            {isLoading ? <Card><CardContent className="p-4"><SkeletonRows /></CardContent></Card> : classicLeaderboard.length === 0 ? (
               <Card>
                 <CardContent className="text-center py-12">
                   <Trophy className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />

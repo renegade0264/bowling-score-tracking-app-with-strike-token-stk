@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
@@ -394,18 +395,35 @@ export function TeamsPage({ onNavigate }: TeamsPageProps) {
     );
   }
 
-  if (teamsLoading || userTeamsLoading || profileLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-            <p className="text-muted-foreground">Loading teams...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const isLoading = teamsLoading || userTeamsLoading || profileLoading;
+
+  const SkeletonTeamCards = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Card key={i}>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-5 w-16" />
+            </div>
+            <Skeleton className="h-4 w-48 mt-1" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-4 w-24" />
+            <div className="flex space-x-2">
+              <Skeleton className="h-8 w-8 rounded-full" />
+              <Skeleton className="h-8 w-8 rounded-full" />
+              <Skeleton className="h-8 w-8 rounded-full" />
+            </div>
+            <div className="flex space-x-2 pt-2">
+              <Skeleton className="h-9 flex-1" />
+              <Skeleton className="h-9 flex-1" />
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -498,21 +516,21 @@ export function TeamsPage({ onNavigate }: TeamsPageProps) {
         <Tabs defaultValue="my-teams" className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="my-teams">
-              My Teams ({userTeams.length})
+              My Teams {!isLoading && `(${userTeams.length})`}
             </TabsTrigger>
             <TabsTrigger value="browse">
-              Browse Teams ({availableTeams.length})
+              Browse {!isLoading && `(${availableTeams.length})`}
             </TabsTrigger>
             <TabsTrigger value="requests">
-              Requests ({teamJoinRequests.length})
+              Requests {!isLoading && `(${teamJoinRequests.length})`}
             </TabsTrigger>
             <TabsTrigger value="invitations">
-              Invitations ({userInvitations.length})
+              Invitations {!isLoading && `(${userInvitations.length})`}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="my-teams" className="space-y-6">
-            {userTeams.length === 0 ? (
+            {isLoading ? <SkeletonTeamCards /> : userTeams.length === 0 ? (
               <Card>
                 <CardContent className="text-center py-12">
                   <Users className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
@@ -563,7 +581,7 @@ export function TeamsPage({ onNavigate }: TeamsPageProps) {
               </div>
             </div>
 
-            {availableTeams.length === 0 ? (
+            {isLoading ? <SkeletonTeamCards /> : availableTeams.length === 0 ? (
               <Card>
                 <CardContent className="text-center py-12">
                   <Search className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />

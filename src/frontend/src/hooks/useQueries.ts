@@ -39,6 +39,7 @@ export function useGetAllGames() {
       return actor.getAllGames(BigInt(0), BigInt(100));
     },
     enabled: !!actor && !isFetching,
+    staleTime: 2 * 60_000,
   });
 }
 
@@ -91,6 +92,7 @@ export function useGetLeaderboard() {
       return actor.getLeaderboard(BigInt(0), BigInt(100));
     },
     enabled: !!actor && !isFetching,
+    staleTime: 2 * 60_000,
   });
 }
 
@@ -107,6 +109,7 @@ export function useGetGlobalLeaderboard() {
         .sort((a, b) => Number(b.averageScore) - Number(a.averageScore));
     },
     enabled: !!actor && !isFetching,
+    staleTime: 2 * 60_000,
   });
 }
 
@@ -157,6 +160,7 @@ export function useGetUserGames(principal?: Principal) {
       return results.filter((g): g is Game => g !== null && g !== undefined);
     },
     enabled: !!actor && !isFetching && !!principal,
+    staleTime: 2 * 60_000,
   });
 }
 
@@ -485,6 +489,7 @@ export function useGetAllTeams() {
       return actor.getAllTeams(BigInt(0), BigInt(100));
     },
     enabled: !!actor && !isFetching,
+    staleTime: 2 * 60_000,
   });
 }
 
