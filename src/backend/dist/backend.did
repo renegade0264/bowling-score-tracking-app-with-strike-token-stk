@@ -375,7 +375,6 @@ service : {
   updateTeamStats: (teamId: nat, averageScore: nat, totalGames: nat,
    bestScore: nat) -> ();
   updateTokenPool: (name: text, remaining: nat) -> ();
-  updateTotalSupply: (amount: nat) -> ();
   updateUserBalance: (user: principal, amount: nat) -> ();
   verifyIcpPayment: (accountIdText: text) -> (variant {
                                                 err: text;

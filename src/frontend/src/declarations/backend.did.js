@@ -419,7 +419,6 @@ export const idlService = IDL.Service({
   'updatePriceFeed' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [], []),
   'updateTeamStats' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Nat, IDL.Nat], [], []),
   'updateTokenPool' : IDL.Func([IDL.Text, IDL.Nat], [], []),
-  'updateTotalSupply' : IDL.Func([IDL.Nat], [], []),
   'updateUserBalance' : IDL.Func([IDL.Principal, IDL.Nat], [], []),
   'verifyIcpPayment' : IDL.Func(
       [IDL.Text],

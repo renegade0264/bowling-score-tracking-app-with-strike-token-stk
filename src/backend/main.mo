@@ -219,6 +219,8 @@ persistent actor BowlingScoreTracker {
   let activeMintCallers = Map.empty<Principal, Bool>(); // C2: CallerGuard for mintStkTokens
   // One-time flag: set to true after the double-spend correction runs in postupgrade.
   var doubleSpendCorrectionApplied : Bool = false;
+  // One-time flag: set to true after totalSupply is reset to 1_000_000 in postupgrade.
+  var totalSupplyCorrectionApplied : Bool = false;
 
   let accessControlState = AccessControl.initState();
 
@@ -250,8 +252,13 @@ persistent actor BowlingScoreTracker {
       };
       let currBal = switch (userBalances.get(victim)) { case (?b) b; case null 0 };
       userBalances.add(victim, safeSub(currBal, correction));
-      totalSupply := safeSub(totalSupply, correction);
       doubleSpendCorrectionApplied := true;
+    };
+    // One-time totalSupply reset: the old `updateTotalSupply` admin function was called
+    // with 3_000_000_000 which corrupted the counter. Reset it to the true fixed cap.
+    if (not totalSupplyCorrectionApplied) {
+      totalSupply := 1_000_000;
+      totalSupplyCorrectionApplied := true;
     };
   };
 
@@ -974,13 +981,6 @@ persistent actor BowlingScoreTracker {
     totalSupply;
   };
 
-  public shared ({ caller }) func updateTotalSupply(amount : Nat) : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
-      Runtime.trap("Unauthorized: Only admins can update total supply");
-    };
-    totalSupply := amount;
-  };
-
   // ===== HTTP OUTCALLS (admin-only for security) =====
 
   public query func transform(input : OutCall.TransformationInput) : async OutCall.TransformationOutput {
@@ -1458,7 +1458,6 @@ persistent actor BowlingScoreTracker {
           stkBalance = recipientWallet.stkBalance + amount;
           stkTransactions = recipientWallet.stkTransactions.concat([recvTx]);
         });
-        totalSupply := safeSub(totalSupply, burnFee);
         tokenTransactions.add(sendTxId, sendTx);
         tokenTransactions.add(recvTxId, recvTx);
         tokenTransactions.add(burnTxId, burnTx);
@@ -1485,7 +1484,6 @@ persistent actor BowlingScoreTracker {
     };
     let currBal = switch (userBalances.get(user)) { case (?b) b; case null 0 };
     userBalances.add(user, safeSub(currBal, amount));
-    totalSupply := safeSub(totalSupply, amount);
     #ok(());
   };
 
@@ -1734,9 +1732,6 @@ persistent actor BowlingScoreTracker {
     // Step 10: Update user STK balance map
     let currBal = switch (userBalances.get(caller)) { case (?b) b; case null 0 };
     userBalances.add(caller, currBal + stkAmount);
-
-    // H2: increment totalSupply on every mint (was previously never incremented)
-    totalSupply += stkAmount;
 
     // Step 11: Decrement minting platform pool
     switch (tokenPools.get("Minting Platform")) {

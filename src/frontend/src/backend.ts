@@ -454,7 +454,6 @@ export interface backendInterface {
     updatePriceFeed(source: string, icpUsd: bigint, status: string): Promise<void>;
     updateTeamStats(teamId: bigint, averageScore: bigint, totalGames: bigint, bestScore: bigint): Promise<void>;
     updateTokenPool(name: string, remaining: bigint): Promise<void>;
-    updateTotalSupply(amount: bigint): Promise<void>;
     updateUserBalance(user: Principal, amount: bigint): Promise<void>;
     verifyIcpPayment(accountIdText: string): Promise<{
         __kind__: "ok";
@@ -1944,20 +1943,6 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.updateTokenPool(arg0, arg1);
-            return result;
-        }
-    }
-    async updateTotalSupply(arg0: bigint): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.updateTotalSupply(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.updateTotalSupply(arg0);
             return result;
         }
     }

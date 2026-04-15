@@ -359,7 +359,6 @@ export interface _SERVICE {
   'updatePriceFeed' : ActorMethod<[string, bigint, string], undefined>,
   'updateTeamStats' : ActorMethod<[bigint, bigint, bigint, bigint], undefined>,
   'updateTokenPool' : ActorMethod<[string, bigint], undefined>,
-  'updateTotalSupply' : ActorMethod<[bigint], undefined>,
   'updateUserBalance' : ActorMethod<[Principal, bigint], undefined>,
   'verifyIcpPayment' : ActorMethod<
     [string],
