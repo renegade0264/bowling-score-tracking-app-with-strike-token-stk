@@ -271,6 +271,7 @@ service : {
   getTokenPools: () -> (vec TokenPool) query;
   getTokenTransaction: (id: nat) -> (opt TokenTransaction) query;
   getTokenTransactions: () -> (vec TokenTransaction) query;
+  getCirculatingSupply: () -> (nat) query;
   getTotalSupply: () -> (nat) query;
   getTotalSupplyStatus: () -> (variant {
                                  err: text;

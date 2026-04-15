@@ -251,6 +251,7 @@ export interface _SERVICE {
   'getTokenPools' : ActorMethod<[], Array<TokenPool>>,
   'getTokenTransaction' : ActorMethod<[bigint], [] | [TokenTransaction]>,
   'getTokenTransactions' : ActorMethod<[], Array<TokenTransaction>>,
+  'getCirculatingSupply' : ActorMethod<[], bigint>,
   'getTotalSupply' : ActorMethod<[], bigint>,
   'getTotalSupplyStatus' : ActorMethod<
     [],

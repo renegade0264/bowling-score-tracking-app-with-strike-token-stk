@@ -289,6 +289,7 @@ export const idlService = IDL.Service({
   'getTokenPools' : IDL.Func([], [IDL.Vec(TokenPool)], []),
   'getTokenTransaction' : IDL.Func([IDL.Nat], [IDL.Opt(TokenTransaction)], []),
   'getTokenTransactions' : IDL.Func([], [IDL.Vec(TokenTransaction)], []),
+  'getCirculatingSupply' : IDL.Func([], [IDL.Nat], ['query']),
   'getTotalSupply' : IDL.Func([], [IDL.Nat], []),
   'getTotalSupplyStatus' : IDL.Func(
       [],

@@ -43,12 +43,14 @@ import {
   useDistributeTokens,
   useGetAdminIcpWallet,
   useGetAllUserProfiles,
+  useGetCirculatingSupply,
   useGetDetailedAuditTrail,
   useGetMarketDataStatus,
   useGetPoolManagementHistory,
   useGetPriceFeeds,
   useGetPurchaseHistory,
   useGetTokenAllocations,
+  useGetTotalSupply,
   useGetTokenTransactions,
   useIsCallerAdmin,
   useSetAdminIcpWallet,
@@ -140,6 +142,8 @@ export function AdminPage({ onNavigate }: AdminPageProps) {
   const { data: marketStatus } = useGetMarketDataStatus();
   const { data: poolManagementHistory, refetch: refetchPoolHistory } =
     useGetPoolManagementHistory();
+  const { data: totalSupply } = useGetTotalSupply();
+  const { data: circulatingSupply } = useGetCirculatingSupply();
   const { mutate: distributeTokens, isPending: isDistributing } =
     useDistributeTokens();
   const { mutate: transferBetweenPools, isPending: isTransferring } =
@@ -1109,6 +1113,21 @@ export function AdminPage({ onNavigate }: AdminPageProps) {
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                {/* Supply overview */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div className="text-center p-4 bg-primary/10 rounded-lg border border-primary/20">
+                    <div className="text-2xl font-bold text-primary">
+                      {(totalSupply !== undefined ? Number(totalSupply) : 1_000_000).toLocaleString()}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Total Supply (fixed cap)</div>
+                  </div>
+                  <div className="text-center p-4 bg-green-500/10 rounded-lg border border-green-500/20">
+                    <div className="text-2xl font-bold text-green-600">
+                      {(circulatingSupply !== undefined ? Number(circulatingSupply) : 0).toLocaleString()}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Circulating Supply (in wallets)</div>
+                  </div>
+                </div>
                 {hasTokenSystem ? (
                   <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -339,6 +339,7 @@ export interface backendInterface {
     getTokenPools(): Promise<Array<TokenPool>>;
     getTokenTransaction(id: bigint): Promise<TokenTransaction | null>;
     getTokenTransactions(): Promise<Array<TokenTransaction>>;
+    getCirculatingSupply(): Promise<bigint>;
     getTotalSupply(): Promise<bigint>;
     getTotalSupplyStatus(): Promise<{
         __kind__: "ok";
@@ -1348,6 +1349,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getTokenTransactions();
             return from_candid_vec_n14(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getCirculatingSupply(): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCirculatingSupply();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCirculatingSupply();
+            return result;
         }
     }
     async getTotalSupply(): Promise<bigint> {

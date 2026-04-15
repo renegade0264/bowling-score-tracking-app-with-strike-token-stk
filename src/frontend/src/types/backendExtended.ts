@@ -144,4 +144,7 @@ export interface backendInterface {
   listFileReferences(): Promise<FileReference[]>;
   getFileReference(path: string): Promise<FileReference>;
   dropFileReference(path: string): Promise<void>;
+  // Token supply
+  getTotalSupply(): Promise<bigint>;
+  getCirculatingSupply(): Promise<bigint>;
 }

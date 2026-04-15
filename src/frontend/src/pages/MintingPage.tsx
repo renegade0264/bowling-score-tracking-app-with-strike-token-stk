@@ -25,6 +25,7 @@ import {
   useGetAdminTreasuryAddress,
   useGetCallerIcpBalance,
   useGetCallerWallet,
+  useGetCirculatingSupply,
   useGetICPPrice,
   useGetMarketDataStatus,
   useGetPriceFeeds,
@@ -108,6 +109,7 @@ export function MintingPage({ onNavigate }: MintingPageProps) {
   const { refetch: refetchWallet } = useGetCallerWallet();
   const { data: adminTreasuryAddress, isLoading: treasuryLoading } =
     useGetAdminTreasuryAddress();
+  const { data: circulatingSupply } = useGetCirculatingSupply();
 
   const { mutateAsync: mintTokens, isPending: isMinting } = useMintStkTokens();
 
@@ -951,7 +953,7 @@ export function MintingPage({ onNavigate }: MintingPageProps) {
         </div>
 
         {/* Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1055,6 +1057,23 @@ export function MintingPage({ onNavigate }: MintingPageProps) {
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Price feed reliability
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Coins className="w-4 h-4" />
+                Circulating Supply
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">
+                {(circulatingSupply !== undefined ? Number(circulatingSupply) : 0).toLocaleString()}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                of 1,000,000 STK total
               </p>
             </CardContent>
           </Card>

@@ -239,6 +239,7 @@ export interface backendInterface {
     getTokenPools(): Promise<Array<TokenPool>>;
     getTokenTransaction(id: bigint): Promise<TokenTransaction | null>;
     getTokenTransactions(): Promise<Array<TokenTransaction>>;
+    getCirculatingSupply(): Promise<bigint>;
     getTotalSupply(): Promise<bigint>;
     getTotalSupplyStatus(): Promise<{
         __kind__: "ok";

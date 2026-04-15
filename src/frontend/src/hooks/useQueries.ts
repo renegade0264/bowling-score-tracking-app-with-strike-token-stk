@@ -1882,3 +1882,31 @@ export function useSendStkTokens() {
     },
   });
 }
+
+export function useGetTotalSupply() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery({
+    queryKey: ["totalSupply"],
+    queryFn: async () => {
+      if (!actor) return BigInt(0);
+      return actor.getTotalSupply();
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 60 * 60_000, // 1 hour — fixed cap, never changes
+  });
+}
+
+export function useGetCirculatingSupply() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery({
+    queryKey: ["circulatingSupply"],
+    queryFn: async () => {
+      if (!actor) return BigInt(0);
+      return actor.getCirculatingSupply();
+    },
+    enabled: !!actor && !isFetching,
+    staleTime: 30_000, // 30 seconds — changes on mint/burn
+  });
+}

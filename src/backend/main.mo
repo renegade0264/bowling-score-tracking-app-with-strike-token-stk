@@ -221,6 +221,9 @@ persistent actor BowlingScoreTracker {
   var doubleSpendCorrectionApplied : Bool = false;
   // One-time flag: set to true after totalSupply is reset to 1_000_000 in postupgrade.
   var totalSupplyCorrectionApplied : Bool = false;
+  // Circulating supply: STK tokens currently held in user wallets.
+  // Starts at 13 to account for tokens minted before this var was introduced.
+  var circulatingSupply : Nat = 13;
 
   let accessControlState = AccessControl.initState();
 
@@ -981,6 +984,10 @@ persistent actor BowlingScoreTracker {
     totalSupply;
   };
 
+  public query func getCirculatingSupply() : async Nat {
+    circulatingSupply;
+  };
+
   // ===== HTTP OUTCALLS (admin-only for security) =====
 
   public query func transform(input : OutCall.TransformationInput) : async OutCall.TransformationOutput {
@@ -1458,6 +1465,7 @@ persistent actor BowlingScoreTracker {
           stkBalance = recipientWallet.stkBalance + amount;
           stkTransactions = recipientWallet.stkTransactions.concat([recvTx]);
         });
+        circulatingSupply := safeSub(circulatingSupply, burnFee);
         tokenTransactions.add(sendTxId, sendTx);
         tokenTransactions.add(recvTxId, recvTx);
         tokenTransactions.add(burnTxId, burnTx);
@@ -1484,6 +1492,7 @@ persistent actor BowlingScoreTracker {
     };
     let currBal = switch (userBalances.get(user)) { case (?b) b; case null 0 };
     userBalances.add(user, safeSub(currBal, amount));
+    circulatingSupply := safeSub(circulatingSupply, amount);
     #ok(());
   };
 
@@ -1732,6 +1741,7 @@ persistent actor BowlingScoreTracker {
     // Step 10: Update user STK balance map
     let currBal = switch (userBalances.get(caller)) { case (?b) b; case null 0 };
     userBalances.add(caller, currBal + stkAmount);
+    circulatingSupply += stkAmount;
 
     // Step 11: Decrement minting platform pool
     switch (tokenPools.get("Minting Platform")) {
