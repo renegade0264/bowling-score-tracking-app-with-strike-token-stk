@@ -15,6 +15,7 @@ import { ProfilePage } from "@/pages/ProfilePage";
 import { StatsPage } from "@/pages/StatsPage";
 import { TeamsPage } from "@/pages/TeamsPage";
 import { WalletPage } from "@/pages/WalletPage";
+import { AnimatePresence, motion } from "motion/react";
 import { ThemeProvider } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import "./index.css";
@@ -179,7 +180,20 @@ export default function App() {
           isAuthenticated={!!identity}
           loginStatus={loginStatus}
         />
-        <main className="flex-1">{renderCurrentPage()}</main>
+        <main className="flex-1">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={appState.currentPage}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              className="h-full"
+            >
+              {renderCurrentPage()}
+            </motion.div>
+          </AnimatePresence>
+        </main>
         <Footer />
       </div>
       <Toaster />
