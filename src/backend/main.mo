@@ -217,6 +217,8 @@ persistent actor BowlingScoreTracker {
   let claimedRewardGames = Map.empty<Nat, Bool>();
   var treasuryClaimedIcp : Nat = 0;
   let activeMintCallers = Map.empty<Principal, Bool>(); // C2: CallerGuard for mintStkTokens
+  // One-time flag: set to true after the double-spend correction runs in postupgrade.
+  var doubleSpendCorrectionApplied : Bool = false;
 
   let accessControlState = AccessControl.initState();
 
@@ -230,6 +232,28 @@ persistent actor BowlingScoreTracker {
     not caller.isAnonymous()
   };
 
+  // One-time double-spend correction: subtracts 2 STK that were minted via the
+  // pre-audit treasury-balance race (block heights 35693427 and 35701273 reused
+  // the same treasury balance as 35693419 and 35701254 respectively).
+  // Guarded by doubleSpendCorrectionApplied so it only ever runs once.
+  system func postupgrade() {
+    if (not doubleSpendCorrectionApplied) {
+      let victim = Principal.fromText("xai2m-ngxnm-xmdef-p75bs-rnfux-cwlos-47xke-rrxst-bmjx7-gqfnb-fae");
+      let correction : Nat = 2;
+      switch (userWallets.get(victim)) {
+        case (?wallet) {
+          if (wallet.stkBalance >= correction) {
+            userWallets.add(victim, { wallet with stkBalance = wallet.stkBalance - correction });
+          };
+        };
+        case null {};
+      };
+      let currBal = switch (userBalances.get(victim)) { case (?b) b; case null 0 };
+      userBalances.add(victim, safeSub(currBal, correction));
+      totalSupply := safeSub(totalSupply, correction);
+      doubleSpendCorrectionApplied := true;
+    };
+  };
 
   let registry : RegistryState = {
     var authorizedPrincipals = [];
@@ -1442,6 +1466,27 @@ persistent actor BowlingScoreTracker {
       };
       case null { #err("Wallet not found") };
     };
+  };
+
+  // Admin-only correction tool: burns an exact amount from a user's wallet and
+  // totalSupply to reverse double-minted tokens without applying the normal burn fee.
+  public shared ({ caller }) func adminBurnTokens(user : Principal, amount : Nat) : async { #ok : (); #err : Text } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      return #err("Unauthorized: Only admins can burn tokens");
+    };
+    switch (userWallets.get(user)) {
+      case null { return #err("Wallet not found for principal: " # user.toText()) };
+      case (?wallet) {
+        if (wallet.stkBalance < amount) {
+          return #err("Insufficient balance: wallet has " # wallet.stkBalance.toText() # " STK, cannot burn " # amount.toText());
+        };
+        userWallets.add(user, { wallet with stkBalance = wallet.stkBalance - amount });
+      };
+    };
+    let currBal = switch (userBalances.get(user)) { case (?b) b; case null 0 };
+    userBalances.add(user, safeSub(currBal, amount));
+    totalSupply := safeSub(totalSupply, amount);
+    #ok(());
   };
 
   public shared ({ caller }) func setBurnFee(newFee : Nat) : async { #ok : (); #err : Text } {
