@@ -147,4 +147,8 @@ export interface backendInterface {
   // Token supply
   getTotalSupply(): Promise<bigint>;
   getCirculatingSupply(): Promise<bigint>;
+  // STK balance (ICRC-1 ledger queries)
+  getCallerStkBalance(): Promise<bigint>;
+  getCallerStkBalanceLive(): Promise<bigint>;
+  getCallerStkTransactions(): Promise<Array<TokenTransaction>>;
 }

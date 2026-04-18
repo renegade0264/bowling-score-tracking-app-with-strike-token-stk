@@ -83,9 +83,11 @@ import {
   Users,
   Wallet,
   Zap,
+  Gamepad2,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { StrikeQuestTestTab } from "./StrikeQuestTestTab";
 
 type Page =
   | "home"
@@ -565,7 +567,7 @@ export function AdminPage({ onNavigate }: AdminPageProps) {
 
         {/* Main Admin Tabs */}
         <Tabs defaultValue="system" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="system" className="flex items-center gap-2">
               <Settings className="w-4 h-4" />
               System Status
@@ -599,6 +601,10 @@ export function AdminPage({ onNavigate }: AdminPageProps) {
             <TabsTrigger value="users" className="flex items-center gap-2">
               <Users className="w-4 h-4" />
               User Management
+            </TabsTrigger>
+            <TabsTrigger value="strikequest" className="flex items-center gap-2">
+              <Gamepad2 className="w-4 h-4" />
+              Strike Quest
             </TabsTrigger>
           </TabsList>
 
@@ -2411,6 +2417,10 @@ export function AdminPage({ onNavigate }: AdminPageProps) {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="strikequest">
+            <StrikeQuestTestTab />
           </TabsContent>
         </Tabs>
       </div>
