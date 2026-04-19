@@ -116,7 +116,7 @@ export function MintingPage({ onNavigate }: MintingPageProps) {
   const [purchaseMode, setPurchaseMode] = useState<"icp" | "stk">("icp");
   const [icpAmount, setIcpAmount] = useState("");
   const [stkAmount, setStkAmount] = useState("");
-  const [exchangeRate] = useState(100); // 1 ICP = 100 STK
+  const [exchangeRate] = useState(50000); // 1 ICP = 50,000 STK
   const [diagnosticLogs, setDiagnosticLogs] = useState<DiagnosticLog[]>([]);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [lastMintingError, setLastMintingError] = useState<string | null>(null);
