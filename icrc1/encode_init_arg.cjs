@@ -79,14 +79,14 @@ const initArg = {
           owner: Principal.fromText('xai2m-ngxnm-xmdef-p75bs-rnfux-cwlos-47xke-rrxst-bmjx7-gqfnb-fae'),
           subaccount: [],                 // null subaccount
         },
-        BigInt('1300000000'),             // 1_300_000_000 e8s = 13 STK
+        BigInt('700000000000'),            // 700_000_000_000 e8s = 7,000 STK
       ],
       [
         {
           owner: Principal.fromText('a6p2m-tiaaa-aaaal-qwxba-cai'),
           subaccount: [Array.from(TREASURY_SUBACCOUNT)], // subaccount [01]
         },
-        BigInt('49999998700000000'),       // 49_999_998_700_000_000 e8s = 499,999,987 STK
+        BigInt('49999993000000000'),        // 49_999_993_000_000_000 e8s = 499,999,930 STK
       ],
     ],
     maximum_number_of_accounts: [],       // null

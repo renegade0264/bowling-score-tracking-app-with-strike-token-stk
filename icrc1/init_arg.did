@@ -15,14 +15,14 @@
           owner = principal "xai2m-ngxnm-xmdef-p75bs-rnfux-cwlos-47xke-rrxst-bmjx7-gqfnb-fae";
           subaccount = null;
         };
-        1_300_000_000 : nat;
+        700_000_000_000 : nat;
       };
       record {
         record {
           owner = principal "a6p2m-tiaaa-aaaal-qwxba-cai";
           subaccount = opt blob "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\01";
         };
-        49_999_998_700_000_000 : nat;
+        49_999_993_000_000_000 : nat;
       };
     };
     maximum_number_of_accounts = null;

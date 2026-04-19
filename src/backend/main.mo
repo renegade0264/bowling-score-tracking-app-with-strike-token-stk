@@ -352,9 +352,14 @@ persistent actor BowlingScoreTracker {
   var tokenomics500MApplied : Bool = false;
   // One-time flag: set to true after burnFee is zeroed to align with 0.001 STK ledger fee.
   var burnFeeZeroApplied : Bool = false;
+  // One-time flag: set to true after xai2m-... balance is scaled to 7,000 STK for 500M supply.
+  var mintedTokensScaledApplied : Bool = false;
   // Circulating supply: STK tokens currently held in user wallets.
-  // Starts at 13 to account for tokens minted before this var was introduced.
-  var circulatingSupply : Nat = 13;
+  // Initialised at 7_000 to match the scaled balance of xai2m-... at 500M supply.
+  var circulatingSupply : Nat = 7_000;
+  // Total STK ever minted/distributed to users (cumulative, never decremented).
+  // Initialised at 7_000 to account for all tokens credited before this var was introduced.
+  var totalMinted : Nat = 7_000;
 
   let accessControlState = AccessControl.initState();
 
@@ -407,6 +412,22 @@ persistent actor BowlingScoreTracker {
     if (not burnFeeZeroApplied) {
       burnFee := 0;
       burnFeeZeroApplied := true;
+    };
+    // Scale xai2m-... balance from 14 STK (at 1M supply) to 7,000 STK (at 500M supply).
+    // Proportional: 14 / 1_000_000 * 500_000_000 = 7_000 STK.
+    // Also resets circulatingSupply and totalMinted to the correct scaled baseline.
+    if (not mintedTokensScaledApplied) {
+      let scaledUser = Principal.fromText("xai2m-ngxnm-xmdef-p75bs-rnfux-cwlos-47xke-rrxst-bmjx7-gqfnb-fae");
+      switch (userWallets.get(scaledUser)) {
+        case (?wallet) {
+          userWallets.add(scaledUser, { wallet with stkBalance = 7_000 });
+        };
+        case null {};
+      };
+      userBalances.add(scaledUser, 7_000);
+      circulatingSupply := 7_000;
+      totalMinted := 7_000;
+      mintedTokensScaledApplied := true;
     };
   };
 
@@ -494,12 +515,11 @@ persistent actor BowlingScoreTracker {
     };
   };
 
-  // Admin-only: force-reinitializes all token pools to the 500M tokenomics allocation.
-  // Clears existing pool entries and resets isInitialized so initializeTokenPools runs fresh.
-  // Use on the live canister after upgrading to update stale pool data.
-  // Accepts either app admin (via AccessControl) or canister controller
-  // (cmanb-aejth-shdoi-krt5o-ijy5p-tineu-7lrav-guzka-k4qxk-2f55o-3qe) since the controller
-  // can upgrade the canister anyway, so having pool reset authority is no additional risk.
+  // Admin-only: removes the legacy "Treasury Reserves" pool and any other old pool names
+  // that no longer belong in the 500M tokenomics.  The 8 current pools are left untouched
+  // so their `remaining` balances are preserved.  Also ensures isInitialized is true so
+  // any future call to initializeTokenPools() is a no-op.
+  // Accepts app admin (via AccessControl) or canister controller.
   let CANISTER_CONTROLLER : Principal = Principal.fromText("cmanb-aejth-shdoi-krt5o-ijy5p-tineu-7lrav-guzka-k4qxk-2f55o-3qe");
   public shared ({ caller }) func resetTokenPools() : async { #ok : (); #err : Text } {
     let isAppAdmin = AccessControl.hasPermission(accessControlState, caller, #admin);
@@ -507,19 +527,13 @@ persistent actor BowlingScoreTracker {
     if (not isAppAdmin and not isController) {
       return #err("Unauthorized: Only admins or the canister controller can reset token pools");
     };
+    // Remove legacy pool names that should no longer exist.
     tokenPools.remove("Treasury Reserves");
     tokenPools.remove("Minting Platform");
     tokenPools.remove("In-Game Rewards");
     tokenPools.remove("Admin Team Wallet");
     tokenPools.remove("NFT Staking Rewards");
-    tokenPools.remove("RPG and NFT Ecosystem");
-    tokenPools.remove("Play-to-Earn Rewards");
-    tokenPools.remove("SNS Decentralization Swap");
-    tokenPools.remove("Ecosystem Treasury");
-    tokenPools.remove("DEX Liquidity");
-    tokenPools.remove("Team and Development");
-    tokenPools.remove("The Forge Reserve");
-    tokenPools.remove("Marketing and Partnerships");
+    // Ensure the 8 current pools exist (no-op if already present, adds if missing).
     isInitialized := false;
     initializeTokenPools();
     #ok(());
@@ -1098,9 +1112,9 @@ persistent actor BowlingScoreTracker {
       };
     };
 
-    switch (tokenPools.get("Minting Platform")) {
+    switch (tokenPools.get("Ecosystem Treasury")) {
       case (?pool) {
-        tokenPools.add("Minting Platform", { pool with remaining = safeSub(pool.remaining, stkAmount) });
+        tokenPools.add("Ecosystem Treasury", { pool with remaining = safeSub(pool.remaining, stkAmount) });
       };
       case null {};
     };
@@ -1165,6 +1179,10 @@ persistent actor BowlingScoreTracker {
 
   public query func getCirculatingSupply() : async Nat {
     circulatingSupply;
+  };
+
+  public query func getTotalMinted() : async Nat {
+    totalMinted;
   };
 
   // Accumulated ICRC-1 transfer fees that have been burned (fee_collector = null).
@@ -1328,6 +1346,7 @@ persistent actor BowlingScoreTracker {
         });
         tokenTransactions.add(poolTxId, poolTx);
         tokenTransactions.add(userTxId, userTx);
+        totalMinted += amount;
 
         // Dual-write: move from treasury subaccount [01] to recipient's ICRC-1 account.
         // Best-effort — Map updates above are authoritative.
@@ -1947,7 +1966,7 @@ persistent actor BowlingScoreTracker {
       amount = stkAmount;
       timestamp = Time.now();
       transactionType = "Mint";
-      pool = ?("Minting Platform");
+      pool = ?("Ecosystem Treasury");
       status = "Completed";
       reference = ?("ICP block height: " # icpBlockHeight.toText());
       ledgerHeight = ?icpBlockHeight;
@@ -1980,11 +1999,12 @@ persistent actor BowlingScoreTracker {
     let currBal = switch (userBalances.get(caller)) { case (?b) b; case null 0 };
     userBalances.add(caller, currBal + stkAmount);
     circulatingSupply += stkAmount;
+    totalMinted += stkAmount;
 
-    // Step 11: Decrement minting platform pool
-    switch (tokenPools.get("Minting Platform")) {
+    // Step 11: Decrement Ecosystem Treasury pool
+    switch (tokenPools.get("Ecosystem Treasury")) {
       case (?pool) {
-        tokenPools.add("Minting Platform", { pool with remaining = safeSub(pool.remaining, stkAmount) });
+        tokenPools.add("Ecosystem Treasury", { pool with remaining = safeSub(pool.remaining, stkAmount) });
       };
       case null {};
     };
@@ -2043,7 +2063,7 @@ persistent actor BowlingScoreTracker {
 
   // Returns the configured per-game STK reward, or 0 if the pool is empty.
   func computeRewardPerGame() : Nat {
-    let poolRemaining = switch (tokenPools.get("In-Game Rewards")) {
+    let poolRemaining = switch (tokenPools.get("Play-to-Earn Rewards")) {
       case (?p) p.remaining;
       case null { return 0 };
     };
@@ -2109,7 +2129,7 @@ persistent actor BowlingScoreTracker {
 
     let reward = computeRewardPerGame();
     if (reward == 0) {
-      return #err("In-Game Rewards pool is empty");
+      return #err("Play-to-Earn Rewards pool is empty");
     };
 
     // Record pool start time on the first ever reward distribution
@@ -2131,7 +2151,7 @@ persistent actor BowlingScoreTracker {
       amount = reward;
       timestamp = now;
       transactionType = "Play-to-Earn";
-      pool = ?"In-Game Rewards";
+      pool = ?"Play-to-Earn Rewards";
       status = "Completed";
       reference = ?("Game #" # gameId.toText());
       ledgerHeight = null;
@@ -2146,6 +2166,7 @@ persistent actor BowlingScoreTracker {
     });
     let currBal = switch (userBalances.get(caller)) { case (?b) b; case null 0 };
     userBalances.add(caller, currBal + reward);
+    totalMinted += reward;
 
     // Update rolling daily tracking
     dailyRewardTracking.add(caller, { lastEarnTime = now; earnedToday = gamesEarnedToday + 1 });
@@ -2156,10 +2177,10 @@ persistent actor BowlingScoreTracker {
       rewardEarnerCount += 1;
     };
 
-    // Decrement the In-Game Rewards pool
-    switch (tokenPools.get("In-Game Rewards")) {
+    // Decrement the Play-to-Earn Rewards pool
+    switch (tokenPools.get("Play-to-Earn Rewards")) {
       case (?pool) {
-        tokenPools.add("In-Game Rewards", { pool with remaining = safeSub(pool.remaining, reward) });
+        tokenPools.add("Play-to-Earn Rewards", { pool with remaining = safeSub(pool.remaining, reward) });
       };
       case null {};
     };
