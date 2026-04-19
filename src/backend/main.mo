@@ -52,10 +52,10 @@ persistent actor BowlingScoreTracker {
 
   let STK_LEDGER_ID : Text = "5h55w-zaaaa-aaaal-qwzjq-cai";
   let STK_E8S : Nat = 100_000_000; // 1 STK unit = 100_000_000 base units
-  let STK_TRANSFER_FEE : Nat = 1_000_000; // 0.01 STK per transfer (cached; retried on BadFee)
+  let STK_TRANSFER_FEE : Nat = 100_000; // 0.001 STK per transfer — matches ledger fee (cached; retried on BadFee)
 
   // Treasury subaccount [1]: 31 zero bytes followed by 0x01.
-  // Holds 999,987 STK on the ICRC-1 ledger; all pool distributions pull from here.
+  // Holds 499,999,987 STK on the ICRC-1 ledger; all pool distributions pull from here.
   //
   // ⚠️  ICRC-2 SAFETY: NEVER use from_subaccount = null when calling icrc2_approve.
   //     null subaccount = the minting account (a6p2m-...[null]). The ICRC-1 spec
@@ -321,11 +321,11 @@ persistent actor BowlingScoreTracker {
   let priceFeeds = Map.empty<Text, PriceFeed>();
   let userBalances = Map.empty<Principal, Nat>();
   let userWallets = Map.empty<Principal, Wallet>();
-  var totalSupply : Nat = 1000000;
+  var totalSupply : Nat = 500_000_000;
   var isInitialized : Bool = false;
-  var burnFee : Nat = 1;
-  var matchReward : Nat = 2;
-  var dailyRewardLimit : Nat = 4;
+  var burnFee : Nat = 0; // 0.001 STK ledger fee (100_000 e8s) is the effective cost; Map balances are whole-STK integers
+  var matchReward : Nat = 50;
+  var dailyRewardLimit : Nat = 2_500;
   var ledgerPrincipal : ?Principal = ?Principal.fromText("ryjl3-tyaaa-aaaaa-aaaba-cai");
   var adminIcpWallet : ?Text = ?"1bc05ddb3a642296fa5f72a31354d40fc47188c781dd227c52d0c9832f79969e";
   let usedMintBlockHeights = Map.empty<Nat, Bool>();
@@ -341,13 +341,17 @@ persistent actor BowlingScoreTracker {
   // are burned, reducing on-chain total_supply. Tracked here for accounting accuracy.
   var burnedFeeE8s : Nat = 0;
   // Rolling 24-hour cap on admin STK distributions via transferFromPoolToUser (P2-D).
-  let MAX_ADMIN_DISTRIBUTION_PER_DAY : Nat = 10_000; // whole STK
+  let MAX_ADMIN_DISTRIBUTION_PER_DAY : Nat = 500_000; // whole STK
   var adminDistributedToday : Nat = 0;
   var adminDistributionDayStart : Int = 0;
   // One-time flag: set to true after the double-spend correction runs in postupgrade.
   var doubleSpendCorrectionApplied : Bool = false;
   // One-time flag: set to true after totalSupply is reset to 1_000_000 in postupgrade.
   var totalSupplyCorrectionApplied : Bool = false;
+  // One-time flag: set to true after 500M tokenomics upgrade (totalSupply, matchReward, dailyRewardLimit).
+  var tokenomics500MApplied : Bool = false;
+  // One-time flag: set to true after burnFee is zeroed to align with 0.001 STK ledger fee.
+  var burnFeeZeroApplied : Bool = false;
   // Circulating supply: STK tokens currently held in user wallets.
   // Starts at 13 to account for tokens minted before this var was introduced.
   var circulatingSupply : Nat = 13;
@@ -384,11 +388,25 @@ persistent actor BowlingScoreTracker {
       userBalances.add(victim, safeSub(currBal, correction));
       doubleSpendCorrectionApplied := true;
     };
-    // One-time totalSupply reset: the old `updateTotalSupply` admin function was called
-    // with 3_000_000_000 which corrupted the counter. Reset it to the true fixed cap.
+    // One-time totalSupply reset to 500_000_000 (500M token tokenomics upgrade).
+    // Previous correction set it to 1_000_000; this upgrades to the new cap.
     if (not totalSupplyCorrectionApplied) {
-      totalSupply := 1_000_000;
+      totalSupply := 500_000_000;
       totalSupplyCorrectionApplied := true;
+    };
+    // 500M tokenomics upgrade: set totalSupply, matchReward, dailyRewardLimit to new values.
+    // Needed because these persistent vars were set before this upgrade was deployed.
+    if (not tokenomics500MApplied) {
+      totalSupply := 500_000_000;
+      matchReward := 50;
+      dailyRewardLimit := 2_500;
+      tokenomics500MApplied := true;
+    };
+    // Zero out burnFee to align with the 0.001 STK ledger fee (100_000 e8s).
+    // Map balances are whole-STK integers so 0 is the correct representation of < 1 STK.
+    if (not burnFeeZeroApplied) {
+      burnFee := 0;
+      burnFeeZeroApplied := true;
     };
   };
 
@@ -464,13 +482,47 @@ persistent actor BowlingScoreTracker {
 
   func initializeTokenPools() {
     if (not isInitialized) {
-      tokenPools.add("Treasury Reserves", { name = "Treasury Reserves"; total = 400000; remaining = 400000 });
-      tokenPools.add("Minting Platform", { name = "Minting Platform"; total = 200000; remaining = 200000 });
-      tokenPools.add("In-Game Rewards", { name = "In-Game Rewards"; total = 150000; remaining = 150000 });
-      tokenPools.add("Admin Team Wallet", { name = "Admin Team Wallet"; total = 150000; remaining = 150000 });
-      tokenPools.add("NFT Staking Rewards", { name = "NFT Staking Rewards"; total = 100000; remaining = 100000 });
+      tokenPools.add("RPG and NFT Ecosystem",      { name = "RPG and NFT Ecosystem";      total = 125_000_000; remaining = 125_000_000 });
+      tokenPools.add("Play-to-Earn Rewards",        { name = "Play-to-Earn Rewards";        total = 100_000_000; remaining = 100_000_000 });
+      tokenPools.add("SNS Decentralization Swap",   { name = "SNS Decentralization Swap";   total = 100_000_000; remaining = 100_000_000 });
+      tokenPools.add("Ecosystem Treasury",           { name = "Ecosystem Treasury";           total =  50_000_000; remaining =  50_000_000 });
+      tokenPools.add("DEX Liquidity",                { name = "DEX Liquidity";                total =  50_000_000; remaining =  50_000_000 });
+      tokenPools.add("Team and Development",         { name = "Team and Development";         total =  37_500_000; remaining =  37_500_000 });
+      tokenPools.add("The Forge Reserve",            { name = "The Forge Reserve";            total =  25_000_000; remaining =  25_000_000 });
+      tokenPools.add("Marketing and Partnerships",   { name = "Marketing and Partnerships";   total =  12_500_000; remaining =  12_500_000 });
       isInitialized := true;
     };
+  };
+
+  // Admin-only: force-reinitializes all token pools to the 500M tokenomics allocation.
+  // Clears existing pool entries and resets isInitialized so initializeTokenPools runs fresh.
+  // Use on the live canister after upgrading to update stale pool data.
+  // Accepts either app admin (via AccessControl) or canister controller
+  // (cmanb-aejth-shdoi-krt5o-ijy5p-tineu-7lrav-guzka-k4qxk-2f55o-3qe) since the controller
+  // can upgrade the canister anyway, so having pool reset authority is no additional risk.
+  let CANISTER_CONTROLLER : Principal = Principal.fromText("cmanb-aejth-shdoi-krt5o-ijy5p-tineu-7lrav-guzka-k4qxk-2f55o-3qe");
+  public shared ({ caller }) func resetTokenPools() : async { #ok : (); #err : Text } {
+    let isAppAdmin = AccessControl.hasPermission(accessControlState, caller, #admin);
+    let isController = caller == CANISTER_CONTROLLER;
+    if (not isAppAdmin and not isController) {
+      return #err("Unauthorized: Only admins or the canister controller can reset token pools");
+    };
+    tokenPools.remove("Treasury Reserves");
+    tokenPools.remove("Minting Platform");
+    tokenPools.remove("In-Game Rewards");
+    tokenPools.remove("Admin Team Wallet");
+    tokenPools.remove("NFT Staking Rewards");
+    tokenPools.remove("RPG and NFT Ecosystem");
+    tokenPools.remove("Play-to-Earn Rewards");
+    tokenPools.remove("SNS Decentralization Swap");
+    tokenPools.remove("Ecosystem Treasury");
+    tokenPools.remove("DEX Liquidity");
+    tokenPools.remove("Team and Development");
+    tokenPools.remove("The Forge Reserve");
+    tokenPools.remove("Marketing and Partnerships");
+    isInitialized := false;
+    initializeTokenPools();
+    #ok(());
   };
 
   // ===== ACCESS CONTROL =====
