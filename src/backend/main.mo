@@ -53,6 +53,7 @@ persistent actor BowlingScoreTracker {
   let STK_LEDGER_ID : Text = "5h55w-zaaaa-aaaal-qwzjq-cai";
   let STK_E8S : Nat = 100_000_000; // 1 STK unit = 100_000_000 base units
   let STK_TRANSFER_FEE : Nat = 100_000; // 0.001 STK per transfer — matches ledger fee (cached; retried on BadFee)
+  let STK_PER_ICP : Nat = 50_000; // 50,000 STK per 1 ICP (500M supply tokenomics)
 
   // Treasury subaccount [1]: 31 zero bytes followed by 0x01.
   // Holds 499,999,987 STK on the ICRC-1 ledger; all pool distributions pull from here.
@@ -354,6 +355,10 @@ persistent actor BowlingScoreTracker {
   var burnFeeZeroApplied : Bool = false;
   // One-time flag: set to true after xai2m-... balance is scaled to 7,000 STK for 500M supply.
   var mintedTokensScaledApplied : Bool = false;
+  // One-time flag: set to true after circulatingSupply is confirmed at 7,000 for 500M supply.
+  var circulatingSupply500MApplied : Bool = false;
+  // One-time flag: set to true after totalMinted is confirmed at 7,000 for 500M supply.
+  var totalMinted500MApplied : Bool = false;
   // Circulating supply: STK tokens currently held in user wallets.
   // Initialised at 7_000 to match the scaled balance of xai2m-... at 500M supply.
   var circulatingSupply : Nat = 7_000;
@@ -428,6 +433,16 @@ persistent actor BowlingScoreTracker {
       circulatingSupply := 7_000;
       totalMinted := 7_000;
       mintedTokensScaledApplied := true;
+    };
+    // Confirm circulatingSupply is set to 7,000 to reflect 500M supply baseline.
+    if (not circulatingSupply500MApplied) {
+      circulatingSupply := 7_000;
+      circulatingSupply500MApplied := true;
+    };
+    // Confirm totalMinted is set to 7,000 to reflect 500M supply baseline.
+    if (not totalMinted500MApplied) {
+      totalMinted := 7_000;
+      totalMinted500MApplied := true;
     };
   };
 
@@ -1878,6 +1893,13 @@ persistent actor BowlingScoreTracker {
       return #err("Amount must be greater than 0");
     };
 
+    // Validate exchange rate: stkAmount must equal icpAmount * STK_PER_ICP / 100_000_000 (ICP e8s).
+    // This enforces the 50,000 STK per 1 ICP rate on the canister side.
+    let expectedStk = icpAmount * STK_PER_ICP / 100_000_000;
+    if (stkAmount != expectedStk) {
+      return #err("Invalid exchange rate: expected " # expectedStk.toText() # " STK for given ICP amount at " # STK_PER_ICP.toText() # " STK/ICP");
+    };
+
     // C2: CallerGuard — reject concurrent minting calls from the same principal.
     // Prevents a second in-flight call from racing through the await window.
     if (activeMintCallers.get(caller) != null) {
@@ -2179,6 +2201,7 @@ persistent actor BowlingScoreTracker {
     let currBal = switch (userBalances.get(caller)) { case (?b) b; case null 0 };
     userBalances.add(caller, currBal + reward);
     totalMinted += reward;
+    circulatingSupply += reward;
 
     // Update rolling daily tracking
     dailyRewardTracking.add(caller, { lastEarnTime = now; earnedToday = gamesEarnedToday + 1 });
