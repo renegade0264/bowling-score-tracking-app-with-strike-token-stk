@@ -359,6 +359,10 @@ persistent actor BowlingScoreTracker {
   var circulatingSupply500MApplied : Bool = false;
   // One-time flag: set to true after totalMinted is confirmed at 7,000 for 500M supply.
   var totalMinted500MApplied : Bool = false;
+  // One-time flag: set to true after initializeAccessControl is called (prevents re-initialization).
+  var accessControlInitialized : Bool = false;
+  // One-time flag: set to true after totalSupply is reconciled with actual ledger state (500,006,930).
+  var ledgerSupplyReconciled : Bool = false;
   // Circulating supply: STK tokens currently held in user wallets.
   // Initialised at 7_000 to match the scaled balance of xai2m-... at 500M supply.
   var circulatingSupply : Nat = 7_000;
@@ -444,6 +448,12 @@ persistent actor BowlingScoreTracker {
       totalMinted := 7_000;
       totalMinted500MApplied := true;
     };
+    // Reconcile totalSupply with actual ICRC-1 ledger state: 500,006,930 STK on-chain
+    // (6,930 STK more than 500,000,000 due to test mints before the 500M upgrade).
+    if (not ledgerSupplyReconciled) {
+      totalSupply := 500_006_930;
+      ledgerSupplyReconciled := true;
+    };
   };
 
   let registry : RegistryState = {
@@ -522,7 +532,7 @@ persistent actor BowlingScoreTracker {
       tokenPools.add("SNS Decentralization Swap",   { name = "SNS Decentralization Swap";   total = 125_000_000; remaining = 125_000_000 });
       tokenPools.add("Minting Platform",             { name = "Minting Platform";             total =  75_000_000; remaining =  75_000_000 });
       tokenPools.add("Play-to-Earn Rewards",         { name = "Play-to-Earn Rewards";         total =  75_000_000; remaining =  75_000_000 });
-      tokenPools.add("Ecosystem Treasury",           { name = "Ecosystem Treasury";           total =  37_500_000; remaining =  37_500_000 });
+      tokenPools.add("Ecosystem Treasury",           { name = "Ecosystem Treasury";           total =  25_000_000; remaining =  25_000_000 });
       tokenPools.add("DEX Liquidity",                { name = "DEX Liquidity";                total =  25_000_000; remaining =  25_000_000 });
       tokenPools.add("Team and Development",         { name = "Team and Development";         total =  25_000_000; remaining =  25_000_000 });
       tokenPools.add("The Forge Reserve",            { name = "The Forge Reserve";            total =  12_500_000; remaining =  12_500_000 });
@@ -572,8 +582,13 @@ persistent actor BowlingScoreTracker {
   include MixinObjectStorage();
 
   public shared ({ caller }) func initializeAccessControl() : async () {
+    // FIX 2: Guard against re-initialization — only the first caller becomes admin.
+    if (accessControlInitialized) {
+      return;
+    };
     AccessControl.initialize(accessControlState, caller);
     initializeTokenPools();
+    accessControlInitialized := true;
   };
 
   // ===== LOGIN =====
@@ -1133,7 +1148,11 @@ persistent actor BowlingScoreTracker {
     userBalances.add(user, currentBalance + stkAmount);
 
     switch (await creditUserWallet(user, stkAmount)) {
-      case (#ok(())) {};
+      case (#ok(())) {
+        // FIX 4: Track supply for admin-initiated payments (was missing before).
+        circulatingSupply += stkAmount;
+        totalMinted += stkAmount;
+      };
       case (#err(msg)) {
         Debug.print("recordPaymentTransaction: creditUserWallet failed for " # user.toText() # ": " # msg);
       };
@@ -1172,7 +1191,13 @@ persistent actor BowlingScoreTracker {
 
   // ===== PRICE FEEDS =====
 
-  public func updatePriceFeed(source : Text, icpUsd : Nat, status : Text) : async () {
+  // FIX 1 (P0): Added admin-only guard. Previously `public func` with no caller — any
+  // canister or user could inject arbitrary price data. Changed to public shared so we
+  // have a caller and can enforce AccessControl.
+  public shared ({ caller }) func updatePriceFeed(source : Text, icpUsd : Nat, status : Text) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      Runtime.trap("Unauthorized: Only admins can update price feeds");
+    };
     priceFeeds.add(source, { source; icpUsd; lastUpdated = Time.now(); status });
   };
 
@@ -1374,6 +1399,7 @@ persistent actor BowlingScoreTracker {
         tokenTransactions.add(poolTxId, poolTx);
         tokenTransactions.add(userTxId, userTx);
         totalMinted += amount;
+        circulatingSupply += amount; // FIX 3: was missing — admin pool distributions also enter circulation
 
         // Dual-write: move from treasury subaccount [01] to recipient's ICRC-1 account.
         // Best-effort — Map updates above are authoritative.
@@ -1679,6 +1705,9 @@ persistent actor BowlingScoreTracker {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       return #err("Unauthorized: Only users can send STK tokens");
     };
+    if (amount == 0) { // FIX 7: reject zero-value sends
+      return #err("Amount must be greater than 0");
+    };
     let recipientPrincipal : Principal = try {
       Principal.fromText(recipient)
     } catch (_) {
@@ -1820,6 +1849,19 @@ persistent actor BowlingScoreTracker {
     if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
       return #err("Unauthorized: Only admins can credit STK tokens");
     };
+    if (amount == 0) {
+      return #err("Amount must be greater than 0");
+    };
+    // FIX 5: Enforce pool accounting — deduct from Minting Platform and track supply.
+    switch (tokenPools.get("Minting Platform")) {
+      case (?pool) {
+        if (pool.remaining < amount) {
+          return #err("Minting Platform pool has insufficient remaining balance");
+        };
+        tokenPools.add("Minting Platform", { pool with remaining = safeSub(pool.remaining, amount) });
+      };
+      case null { return #err("Minting Platform pool not initialized") };
+    };
     switch (userWallets.get(caller)) {
       case (?wallet) {
         let transactionId = nextTransactionId;
@@ -1831,7 +1873,7 @@ persistent actor BowlingScoreTracker {
           amount;
           timestamp = Time.now();
           transactionType = "Receive";
-          pool = null;
+          pool = ?"Minting Platform";
           status = "Completed";
           reference = null;
           ledgerHeight = null;
@@ -1842,6 +1884,8 @@ persistent actor BowlingScoreTracker {
           stkTransactions = wallet.stkTransactions.concat([tx]);
         });
         tokenTransactions.add(transactionId, tx);
+        circulatingSupply += amount;
+        totalMinted += amount;
         #ok(());
       };
       case null { #err("Wallet not found") };
@@ -2044,7 +2088,7 @@ persistent actor BowlingScoreTracker {
     };
 
     // Step 12: Dual-write — move STK from treasury subaccount [01] to caller's ICRC-1 account.
-    // Using the treasury (not the minting account) keeps total supply fixed at 1,000,000 STK.
+    // Using the treasury (not the minting account) keeps total supply fixed at 500,006,930 STK.
     // Best-effort: Map is authoritative; ICRC-1 failure does not revert the mint.
     // BadFee retried once; #Duplicate treated as idempotent success.
     //
