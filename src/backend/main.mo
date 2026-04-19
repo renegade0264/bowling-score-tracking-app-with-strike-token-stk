@@ -363,6 +363,9 @@ persistent actor BowlingScoreTracker {
   var accessControlInitialized : Bool = false;
   // One-time flag: set to true after totalSupply is reconciled with actual ledger state (500,006,930).
   var ledgerSupplyReconciled : Bool = false;
+  // One-time flag: set to true after Minting Platform pool remaining is reduced by 7,000 to
+  // reflect the tokens already distributed via the mintedTokensScaledApplied postupgrade.
+  var mintingPlatformBaselineApplied : Bool = false;
   // Circulating supply: STK tokens currently held in user wallets.
   // Initialised at 7_000 to match the scaled balance of xai2m-... at 500M supply.
   var circulatingSupply : Nat = 7_000;
@@ -453,6 +456,18 @@ persistent actor BowlingScoreTracker {
     if (not ledgerSupplyReconciled) {
       totalSupply := 500_006_930;
       ledgerSupplyReconciled := true;
+    };
+    // Deduct 7,000 from Minting Platform pool remaining to reflect the tokens already
+    // distributed via mintedTokensScaledApplied (credited directly to wallet, bypassing pool).
+    // Fixes all frontend "distributed" displays which derive from pool.total - pool.remaining.
+    if (not mintingPlatformBaselineApplied) {
+      switch (tokenPools.get("Minting Platform")) {
+        case (?pool) {
+          tokenPools.add("Minting Platform", { pool with remaining = safeSub(pool.remaining, 7_000) });
+        };
+        case null {};
+      };
+      mintingPlatformBaselineApplied := true;
     };
   };
 
