@@ -504,21 +504,20 @@ persistent actor BowlingScoreTracker {
   func initializeTokenPools() {
     if (not isInitialized) {
       tokenPools.add("RPG and NFT Ecosystem",      { name = "RPG and NFT Ecosystem";      total = 125_000_000; remaining = 125_000_000 });
-      tokenPools.add("Play-to-Earn Rewards",        { name = "Play-to-Earn Rewards";        total = 100_000_000; remaining = 100_000_000 });
-      tokenPools.add("SNS Decentralization Swap",   { name = "SNS Decentralization Swap";   total = 100_000_000; remaining = 100_000_000 });
-      tokenPools.add("Ecosystem Treasury",           { name = "Ecosystem Treasury";           total =  50_000_000; remaining =  50_000_000 });
-      tokenPools.add("DEX Liquidity",                { name = "DEX Liquidity";                total =  50_000_000; remaining =  50_000_000 });
-      tokenPools.add("Team and Development",         { name = "Team and Development";         total =  37_500_000; remaining =  37_500_000 });
-      tokenPools.add("The Forge Reserve",            { name = "The Forge Reserve";            total =  25_000_000; remaining =  25_000_000 });
+      tokenPools.add("SNS Decentralization Swap",   { name = "SNS Decentralization Swap";   total = 125_000_000; remaining = 125_000_000 });
+      tokenPools.add("Minting Platform",             { name = "Minting Platform";             total =  75_000_000; remaining =  75_000_000 });
+      tokenPools.add("Play-to-Earn Rewards",         { name = "Play-to-Earn Rewards";         total =  75_000_000; remaining =  75_000_000 });
+      tokenPools.add("Ecosystem Treasury",           { name = "Ecosystem Treasury";           total =  37_500_000; remaining =  37_500_000 });
+      tokenPools.add("DEX Liquidity",                { name = "DEX Liquidity";                total =  25_000_000; remaining =  25_000_000 });
+      tokenPools.add("Team and Development",         { name = "Team and Development";         total =  25_000_000; remaining =  25_000_000 });
+      tokenPools.add("The Forge Reserve",            { name = "The Forge Reserve";            total =  12_500_000; remaining =  12_500_000 });
       tokenPools.add("Marketing and Partnerships",   { name = "Marketing and Partnerships";   total =  12_500_000; remaining =  12_500_000 });
       isInitialized := true;
     };
   };
 
-  // Admin-only: removes the legacy "Treasury Reserves" pool and any other old pool names
-  // that no longer belong in the 500M tokenomics.  The 8 current pools are left untouched
-  // so their `remaining` balances are preserved.  Also ensures isInitialized is true so
-  // any future call to initializeTokenPools() is a no-op.
+  // Admin-only: wipes ALL pool entries (old and new names) and reinitializes
+  // the canonical 9-pool 500M tokenomics from scratch.
   // Accepts app admin (via AccessControl) or canister controller.
   let CANISTER_CONTROLLER : Principal = Principal.fromText("cmanb-aejth-shdoi-krt5o-ijy5p-tineu-7lrav-guzka-k4qxk-2f55o-3qe");
   public shared ({ caller }) func resetTokenPools() : async { #ok : (); #err : Text } {
@@ -527,13 +526,26 @@ persistent actor BowlingScoreTracker {
     if (not isAppAdmin and not isController) {
       return #err("Unauthorized: Only admins or the canister controller can reset token pools");
     };
-    // Remove legacy pool names that should no longer exist.
+    // Remove every pool name that has ever existed (remove is a no-op if absent).
+    // Legacy names:
     tokenPools.remove("Treasury Reserves");
-    tokenPools.remove("Minting Platform");
     tokenPools.remove("In-Game Rewards");
     tokenPools.remove("Admin Team Wallet");
     tokenPools.remove("NFT Staking Rewards");
-    // Ensure the 8 current pools exist (no-op if already present, adds if missing).
+    tokenPools.remove("Exchange Liquidity");
+    tokenPools.remove("Community Airdrop");
+    tokenPools.remove("Partnerships and Collabs");
+    // Previous 500M-era names that are being replaced or reallocated:
+    tokenPools.remove("RPG and NFT Ecosystem");
+    tokenPools.remove("SNS Decentralization Swap");
+    tokenPools.remove("Minting Platform");
+    tokenPools.remove("Play-to-Earn Rewards");
+    tokenPools.remove("Ecosystem Treasury");
+    tokenPools.remove("DEX Liquidity");
+    tokenPools.remove("Team and Development");
+    tokenPools.remove("The Forge Reserve");
+    tokenPools.remove("Marketing and Partnerships");
+    // Reinitialize with the canonical 9 pools.
     isInitialized := false;
     initializeTokenPools();
     #ok(());
@@ -1112,9 +1124,9 @@ persistent actor BowlingScoreTracker {
       };
     };
 
-    switch (tokenPools.get("Ecosystem Treasury")) {
+    switch (tokenPools.get("Minting Platform")) {
       case (?pool) {
-        tokenPools.add("Ecosystem Treasury", { pool with remaining = safeSub(pool.remaining, stkAmount) });
+        tokenPools.add("Minting Platform", { pool with remaining = safeSub(pool.remaining, stkAmount) });
       };
       case null {};
     };
@@ -1966,7 +1978,7 @@ persistent actor BowlingScoreTracker {
       amount = stkAmount;
       timestamp = Time.now();
       transactionType = "Mint";
-      pool = ?("Ecosystem Treasury");
+      pool = ?("Minting Platform");
       status = "Completed";
       reference = ?("ICP block height: " # icpBlockHeight.toText());
       ledgerHeight = ?icpBlockHeight;
@@ -2001,10 +2013,10 @@ persistent actor BowlingScoreTracker {
     circulatingSupply += stkAmount;
     totalMinted += stkAmount;
 
-    // Step 11: Decrement Ecosystem Treasury pool
-    switch (tokenPools.get("Ecosystem Treasury")) {
+    // Step 11: Decrement Minting Platform pool
+    switch (tokenPools.get("Minting Platform")) {
       case (?pool) {
-        tokenPools.add("Ecosystem Treasury", { pool with remaining = safeSub(pool.remaining, stkAmount) });
+        tokenPools.add("Minting Platform", { pool with remaining = safeSub(pool.remaining, stkAmount) });
       };
       case null {};
     };
