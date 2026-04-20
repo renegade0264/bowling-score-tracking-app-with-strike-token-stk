@@ -1123,7 +1123,7 @@ export function AdminPage({ onNavigate }: AdminPageProps) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <div className="text-center p-4 bg-primary/10 rounded-lg border border-primary/20">
                     <div className="text-2xl font-bold text-primary">
-                      {(totalSupply !== undefined ? Number(totalSupply) : 1_000_000).toLocaleString()}
+                      {(totalSupply !== undefined ? Number(totalSupply) : 500_000_000).toLocaleString()}
                     </div>
                     <div className="text-sm text-muted-foreground">Total Supply (fixed cap)</div>
                   </div>

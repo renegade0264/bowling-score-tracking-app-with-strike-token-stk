@@ -1073,7 +1073,7 @@ export function MintingPage({ onNavigate }: MintingPageProps) {
                 {(circulatingSupply !== undefined ? Number(circulatingSupply) : 0).toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                of 1,000,000 STK total
+                of 500,000,000 STK total
               </p>
             </CardContent>
           </Card>

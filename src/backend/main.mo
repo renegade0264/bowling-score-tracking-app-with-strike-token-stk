@@ -56,7 +56,7 @@ persistent actor BowlingScoreTracker {
   let STK_PER_ICP : Nat = 50_000; // 50,000 STK per 1 ICP (500M supply tokenomics)
 
   // Treasury subaccount [1]: 31 zero bytes followed by 0x01.
-  // Holds 499,999,987 STK on the ICRC-1 ledger; all pool distributions pull from here.
+  // Holds 499,992,930 STK on the ICRC-1 ledger; all pool distributions pull from here.
   //
   // ⚠️  ICRC-2 SAFETY: NEVER use from_subaccount = null when calling icrc2_approve.
   //     null subaccount = the minting account (a6p2m-...[null]). The ICRC-1 spec
@@ -361,8 +361,13 @@ persistent actor BowlingScoreTracker {
   var totalMinted500MApplied : Bool = false;
   // One-time flag: set to true after initializeAccessControl is called (prevents re-initialization).
   var accessControlInitialized : Bool = false;
-  // One-time flag: set to true after totalSupply is reconciled with actual ledger state (500,006,930).
+  // One-time flag: set to true after the ledgerSupplyReconciled block ran (set totalSupply to
+  // 500,006,930 — later corrected back to 500,000,000 by totalSupplyFixedCapApplied).
   var ledgerSupplyReconciled : Bool = false;
+  // One-time flag: restores totalSupply to the correct 500,000,000 fixed cap. The previous
+  // ledgerSupplyReconciled block incorrectly used the ledger's on-chain value (500,006,930)
+  // which includes test mints. The stated supply cap is always 500,000,000.
+  var totalSupplyFixedCapApplied : Bool = false;
   // One-time flag: set to true after Minting Platform pool remaining is reduced by 7,000 to
   // reflect the tokens already distributed via the mintedTokensScaledApplied postupgrade.
   var mintingPlatformBaselineApplied : Bool = false;
@@ -451,11 +456,19 @@ persistent actor BowlingScoreTracker {
       totalMinted := 7_000;
       totalMinted500MApplied := true;
     };
-    // Reconcile totalSupply with actual ICRC-1 ledger state: 500,006,930 STK on-chain
-    // (6,930 STK more than 500,000,000 due to test mints before the 500M upgrade).
+    // Historical: this block ran once. Originally it set totalSupply := 500,006,930 (the
+    // on-chain ledger value including test mints), which was incorrect. The fixed cap is
+    // always 500,000,000 regardless of ledger total_supply. Corrected by the next block.
     if (not ledgerSupplyReconciled) {
-      totalSupply := 500_006_930;
+      totalSupply := 500_000_000;
       ledgerSupplyReconciled := true;
+    };
+    // Restore the correct fixed supply cap of 500,000,000. The ledgerSupplyReconciled block
+    // above incorrectly reflected test-mint bloat (6,930 extra STK on-chain). Our stated cap
+    // is always 500,000,000 regardless of ledger total_supply.
+    if (not totalSupplyFixedCapApplied) {
+      totalSupply := 500_000_000;
+      totalSupplyFixedCapApplied := true;
     };
     // Deduct 7,000 from Minting Platform pool remaining to reflect the tokens already
     // distributed via mintedTokensScaledApplied (credited directly to wallet, bypassing pool).
@@ -1241,7 +1254,9 @@ persistent actor BowlingScoreTracker {
   };
 
   public query func getTotalSupply() : async Nat {
-    totalSupply;
+    // Always return the fixed supply cap. The var is kept for legacy compatibility
+    // but the canonical answer is always 500,000,000 regardless of ledger state.
+    500_000_000
   };
 
   public query func getCirculatingSupply() : async Nat {
